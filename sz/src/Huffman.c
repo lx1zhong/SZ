@@ -808,6 +808,7 @@ void encode_withTree(HuffmanTree* huffmanTree, int *s, size_t length, unsigned c
 	free(treeBytes);
 	size_t enCodeSize = 0;
 	encode(huffmanTree, s, length, *out+8+treeByteSize, &enCodeSize);
+	printf("treeByteSize=%u, enCodeSize=%lu\n", treeByteSize, enCodeSize);
 	*outSize = 8+treeByteSize+enCodeSize;
 }
 
@@ -847,6 +848,7 @@ int encode_withTree_MSST19(HuffmanTree* huffmanTree, int *s, size_t length, unsi
 	//TimeDurationStart("encode", &clockPointEncode);
 	encode(huffmanTree, s, length, *out+8+treeByteSize, &enCodeSize);
 	*outSize = 8+treeByteSize+enCodeSize;
+	printf("treeByteSize=%u, enCodeSize=%lu\n", treeByteSize, enCodeSize);
 	//TimeDurationEnd(&clockPointEncode);
 	//unsigned short state[length];
 	//decode(*out+4+treeByteSize, enCodeSize, qqq[0], state);

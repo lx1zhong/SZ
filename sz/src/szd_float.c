@@ -17,7 +17,29 @@
 #include "szd_float_pwr.h"
 #include "szd_float_ts.h"
 #include "utility.h"
+#include "transcode.h"
+// #define TIMER__
+#ifdef TIMER__
+#include <sys/time.h>
 
+struct timeval Start4; /*only used for recording the cost*/
+double huffCost4 = 0;
+
+void huff_cost_start4()
+{
+	huffCost4 = 0;
+	gettimeofday(&Start4, NULL);
+}
+
+void huff_cost_end4()
+{
+	double elapsed;
+	struct timeval costEnd;
+	gettimeofday(&costEnd, NULL);
+	elapsed = ((costEnd.tv_sec*1000000+costEnd.tv_usec)-(Start4.tv_sec*1000000+Start4.tv_usec))/1000000.0;
+	huffCost4 += elapsed;
+}
+#endif
 
 //struct timeval startTime_;
 //struct timeval endTime_;  /* Start and end times */
@@ -69,7 +91,6 @@ size_t cmpSize, int compressionType, float* hist_data)
 			else
 				confparams_dec->szMode = SZ_BEST_SPEED;			
 		}
-		
 		if(confparams_dec->szMode==SZ_BEST_SPEED)
 		{
 			tmpSize = cmpSize;
@@ -98,6 +119,7 @@ size_t cmpSize, int compressionType, float* hist_data)
 		
 	//TODO: convert szTmpBytes to data array.
 	TightDataPointStorageF* tdps;
+	//
 	int errBoundMode = new_TightDataPointStorageF_fromFlatBytes(&tdps, szTmpBytes, tmpSize);
 	
 	//writeByteData(tdps->typeArray, tdps->typeArray_size, "decompress-typebytes.tbt");
@@ -105,6 +127,7 @@ size_t cmpSize, int compressionType, float* hist_data)
 	int floatSize = sizeof(float);
 	if(tdps->isLossless)
 	{
+		printf("origin data\n");
 		*newData = (float*)malloc(floatSize*dataLength);
 		if(sysEndianType==BIG_ENDIAN_SYSTEM)
 		{
@@ -125,6 +148,7 @@ size_t cmpSize, int compressionType, float* hist_data)
 	{
 		if(tdps->raBytes_size > 0) //v2.0
 		{
+			
 			if (dim == 1)
 				getSnapshotData_float_1D(newData,r1,tdps, errBoundMode, 0, hist_data);
 			else if(dim == 2)
@@ -198,9 +222,26 @@ void decompressDataSeries_float_1D(float** data, size_t dataSeriesLength, float*
 
 	int* type = (int*)malloc(dataSeriesLength*sizeof(int));
 	
-	HuffmanTree* huffmanTree = createHuffmanTree(tdps->stateNum);
-	decode_withTree(huffmanTree, tdps->typeArray, dataSeriesLength, type);
-	SZ_ReleaseHuffman(huffmanTree);	
+	if (tdps->entropyType == 0) {
+		HuffmanTree* huffmanTree = createHuffmanTree(tdps->stateNum);
+		decode_withTree(huffmanTree, tdps->typeArray, dataSeriesLength, type);
+		SZ_ReleaseHuffman(huffmanTree);	
+	}
+	else if (tdps->entropyType == 1) {
+		short* type__ = (short*)malloc(dataSeriesLength*sizeof(short));
+		int tmpSize = sz_lossless_decompress(ZSTD_COMPRESSOR, tdps->typeArray, tdps->typeArray_size, (unsigned char **)&type__, dataSeriesLength*sizeof(short));
+		if (tmpSize != dataSeriesLength*sizeof(short)){
+			printf("tmpSize(%d) != dataSeriesLength*sizeof(short)(%lu)",tmpSize,dataSeriesLength*sizeof(short));
+		}
+		for (int i=0; i<dataSeriesLength; i++)
+			type[i] = (int)type__[i];
+		free(type__);
+	}
+	else {
+		decode_with_fse(type, dataSeriesLength, tdps->intervals, tdps->FseCode, tdps->FseCode_size, 
+					tdps->transCodeBits, tdps->transCodeBits_size);
+	}
+
 
 	unsigned char preBytes[4];
 	unsigned char curBytes[4];
@@ -303,9 +344,25 @@ void decompressDataSeries_float_2D(float** data, size_t r1, size_t r2, float* hi
 
 	int* type = (int*)malloc(dataSeriesLength*sizeof(int));
 
-	HuffmanTree* huffmanTree = createHuffmanTree(tdps->stateNum);
-	decode_withTree(huffmanTree, tdps->typeArray, dataSeriesLength, type);
-	SZ_ReleaseHuffman(huffmanTree);	
+	if (tdps->entropyType == 0) {
+		HuffmanTree* huffmanTree = createHuffmanTree(tdps->stateNum);
+		decode_withTree(huffmanTree, tdps->typeArray, dataSeriesLength, type);
+		SZ_ReleaseHuffman(huffmanTree);	
+	}
+	else if (tdps->entropyType == 1) {
+		short* type__ = (short*)malloc(dataSeriesLength*sizeof(short));
+		int tmpSize = sz_lossless_decompress(ZSTD_COMPRESSOR, tdps->typeArray, tdps->typeArray_size, (unsigned char **)&type__, dataSeriesLength*sizeof(short));
+		if (tmpSize != dataSeriesLength*sizeof(short)){
+			printf("tmpSize(%d) != dataSeriesLength*sizeof(short)(%lu)",tmpSize,dataSeriesLength*sizeof(short));
+		}
+		for (int i=0; i<dataSeriesLength; i++)
+			type[i] = (int)type__[i];
+		free(type__);
+	}
+	else {
+		decode_with_fse(type, dataSeriesLength, tdps->intervals, tdps->FseCode, tdps->FseCode_size, 
+					tdps->transCodeBits, tdps->transCodeBits_size);
+	}
 
 	unsigned char preBytes[4];
 	unsigned char curBytes[4];
@@ -615,11 +672,33 @@ void decompressDataSeries_float_3D(float** data, size_t r1, size_t r2, size_t r3
 
 	*data = (float*)malloc(sizeof(float)*dataSeriesLength);
 	int* type = (int*)malloc(dataSeriesLength*sizeof(int));
+#ifdef TIMER__
+	huff_cost_start4();
+#endif
+	if (tdps->entropyType == 0) {
+		HuffmanTree* huffmanTree = createHuffmanTree(tdps->stateNum);
+		decode_withTree(huffmanTree, tdps->typeArray, dataSeriesLength, type);
+		SZ_ReleaseHuffman(huffmanTree);	
+	}
+	else if (tdps->entropyType == 1) {
+		short* type__ = (short*)malloc(dataSeriesLength*sizeof(short));
+		int tmpSize = sz_lossless_decompress(ZSTD_COMPRESSOR, tdps->typeArray, tdps->typeArray_size, (unsigned char **)&type__, dataSeriesLength*sizeof(short));
+		if (tmpSize != dataSeriesLength*sizeof(short)){
+			printf("tmpSize(%d) != dataSeriesLength*sizeof(short)(%lu)",tmpSize,dataSeriesLength*sizeof(short));
+		}
+		for (int i=0; i<dataSeriesLength; i++)
+			type[i] = (int)type__[i];
+		free(type__);
+	}
+	else {
+		decode_with_fse(type, dataSeriesLength, tdps->intervals, tdps->FseCode, tdps->FseCode_size, 
+					tdps->transCodeBits, tdps->transCodeBits_size);
+	}
+#ifdef TIMER__
+    huff_cost_end4();
+    printf("[huf/fse]: time=%f\n", huffCost4);
 
-	HuffmanTree* huffmanTree = createHuffmanTree(tdps->stateNum);
-	decode_withTree(huffmanTree, tdps->typeArray, dataSeriesLength, type);
-	SZ_ReleaseHuffman(huffmanTree);	
-
+#endif
 	unsigned char preBytes[4];
 	unsigned char curBytes[4];
 
@@ -1157,9 +1236,25 @@ void decompressDataSeries_float_4D(float** data, size_t r1, size_t r2, size_t r3
 	*data = (float*)malloc(sizeof(float)*dataSeriesLength);
 	int* type = (int*)malloc(dataSeriesLength*sizeof(int));
 
-	HuffmanTree* huffmanTree = createHuffmanTree(tdps->stateNum);
-	decode_withTree(huffmanTree, tdps->typeArray, dataSeriesLength, type);
-	SZ_ReleaseHuffman(huffmanTree);	
+	if (tdps->entropyType == 0) {
+		HuffmanTree* huffmanTree = createHuffmanTree(tdps->stateNum);
+		decode_withTree(huffmanTree, tdps->typeArray, dataSeriesLength, type);
+		SZ_ReleaseHuffman(huffmanTree);	
+	}
+	else if (tdps->entropyType == 1) {
+		short* type__ = (short*)malloc(dataSeriesLength*sizeof(short));
+		int tmpSize = sz_lossless_decompress(ZSTD_COMPRESSOR, tdps->typeArray, tdps->typeArray_size, (unsigned char **)&type__, dataSeriesLength*sizeof(short));
+		if (tmpSize != dataSeriesLength*sizeof(short)){
+			printf("tmpSize(%d) != dataSeriesLength*sizeof(short)(%lu)",tmpSize,dataSeriesLength*sizeof(short));
+		}
+		for (int i=0; i<dataSeriesLength; i++)
+			type[i] = (int)type__[i];
+		free(type__);
+	}
+	else {
+		decode_with_fse(type, dataSeriesLength, tdps->intervals, tdps->FseCode, tdps->FseCode_size, 
+					tdps->transCodeBits, tdps->transCodeBits_size);
+	}
 
 	unsigned char preBytes[4];
 	unsigned char curBytes[4];
@@ -1710,15 +1805,33 @@ void decompressDataSeries_float_1D_MSST19(float** data, size_t dataSeriesLength,
 								// leadNum
 	unsigned char* leadNum;
 	//double interval = tdps->realPrecision*2;
+	// printf("FseCode_size=%lu, transCodeBits_size=%lu\n", tdps->FseCode_size, tdps->transCodeBits_size);
 	
 	convertByteArray2IntArray_fast_2b(tdps->exactDataNum, tdps->leadNumArray, tdps->leadNumArray_size, &leadNum);
 	*data = (float*)malloc(sizeof(float)*dataSeriesLength);
 
 	int* type = (int*)malloc(dataSeriesLength*sizeof(int));
-	
-	HuffmanTree* huffmanTree = createHuffmanTree(tdps->stateNum);
-	decode_withTree_MSST19(huffmanTree, tdps->typeArray, dataSeriesLength, type, tdps->max_bits);
-	SZ_ReleaseHuffman(huffmanTree);	
+
+	if (tdps->entropyType == 0) {
+		HuffmanTree* huffmanTree = createHuffmanTree(tdps->stateNum);
+		decode_withTree_MSST19(huffmanTree, tdps->typeArray, dataSeriesLength, type, tdps->max_bits);
+		SZ_ReleaseHuffman(huffmanTree);	
+	}
+	else if (tdps->entropyType == 1) {
+		unsigned short* type__ = (unsigned short*)malloc(dataSeriesLength*sizeof(unsigned short));
+		int tmpSize = sz_lossless_decompress(ZSTD_COMPRESSOR, tdps->typeArray, tdps->typeArray_size, (unsigned char **)&type__, dataSeriesLength*sizeof(unsigned short));
+		if (tmpSize != dataSeriesLength*sizeof(unsigned short)){
+			printf("tmpSize(%d) != dataSeriesLength*sizeof(short)(%lu)", tmpSize, dataSeriesLength*sizeof(unsigned short));
+		}
+		for (int i=0; i<dataSeriesLength; i++)
+			type[i] = (type__[i]);
+		free(type__);
+	}
+	else {
+		decode_with_fse(type, dataSeriesLength, tdps->intervals, tdps->FseCode, tdps->FseCode_size, 
+					tdps->transCodeBits, tdps->transCodeBits_size);
+	}
+
 	unsigned char preBytes[4];
 	unsigned char curBytes[4];
 	
@@ -1741,6 +1854,7 @@ void decompressDataSeries_float_1D_MSST19(float** data, size_t dataSeriesLength,
 	int type_;
 	for (i = 0; i < dataSeriesLength; i++) {
 		type_ = type[i];
+		// printf("type[%d]=%d\n",i,type_);
 		switch (type_) {
 		case 0:
 			// compute resiBits
@@ -1786,10 +1900,13 @@ void decompressDataSeries_float_1D_MSST19(float** data, size_t dataSeriesLength,
 			predValue = (*data)[i];
 			break;
 		default:
+		// printf("1\n");
 			//predValue = 2 * (*data)[i-1] - (*data)[i-2];
 			//predValue = (*data)[i-1];
-			predValue = fabs(predValue) * precisionTable[type_];			
+			predValue = fabs(predValue) * precisionTable[type_];	
+		// printf("11\n");		
 			(*data)[i] = predValue;
+		// printf("111\n");
 			break;
 		}
 		//printf("%.30G\n",(*data)[i]);
@@ -1819,16 +1936,31 @@ void decompressDataSeries_float_2D_MSST19(float** data, size_t r1, size_t r2, Ti
 
 	unsigned char* leadNum;
 	//double realPrecision = tdps->realPrecision;
-
 	convertByteArray2IntArray_fast_2b(tdps->exactDataNum, tdps->leadNumArray, tdps->leadNumArray_size, &leadNum);
 
 	*data = (float*)malloc(sizeof(float)*dataSeriesLength);
 
     int* type = (int*)malloc(dataSeriesLength*sizeof(int));
 
-	HuffmanTree* huffmanTree = createHuffmanTree(tdps->stateNum);
-	decode_withTree_MSST19(huffmanTree, tdps->typeArray, dataSeriesLength, type, tdps->max_bits);
-	SZ_ReleaseHuffman(huffmanTree);	
+	if (tdps->entropyType == 0) {
+		HuffmanTree* huffmanTree = createHuffmanTree(tdps->stateNum);
+		decode_withTree_MSST19(huffmanTree, tdps->typeArray, dataSeriesLength, type, tdps->max_bits);
+		SZ_ReleaseHuffman(huffmanTree);	
+	}
+	else if (tdps->entropyType == 1) {
+		short* type__ = (short*)malloc(dataSeriesLength*sizeof(short));
+		int tmpSize = sz_lossless_decompress(ZSTD_COMPRESSOR, tdps->typeArray, tdps->typeArray_size, (unsigned char **)&type__, dataSeriesLength*sizeof(short));
+		if (tmpSize != dataSeriesLength*sizeof(short)){
+			printf("tmpSize(%d) != dataSeriesLength*sizeof(short)(%lu)",tmpSize,dataSeriesLength*sizeof(short));
+		}
+		for (int i=0; i<dataSeriesLength; i++)
+			type[i] = (int)type__[i];
+		free(type__);
+	}
+	else {
+		decode_with_fse(type, dataSeriesLength, tdps->intervals, tdps->FseCode, tdps->FseCode_size, 
+					tdps->transCodeBits, tdps->transCodeBits_size);
+	}
 
 	unsigned char preBytes[4];
 	unsigned char curBytes[4];
@@ -2152,10 +2284,34 @@ void decompressDataSeries_float_3D_MSST19(float** data, size_t r1, size_t r2, si
 		precisionTable[i] = test;
 	}
 
-	HuffmanTree* huffmanTree = createHuffmanTree(tdps->stateNum);
-	decode_withTree_MSST19(huffmanTree, tdps->typeArray, dataSeriesLength, type, tdps->max_bits);
-	SZ_ReleaseHuffman(huffmanTree);
+#ifdef TIMER__
+	huff_cost_start4();
+#endif
+	if (tdps->entropyType == 0) {
+		HuffmanTree* huffmanTree = createHuffmanTree(tdps->stateNum);
+		decode_withTree_MSST19(huffmanTree, tdps->typeArray, dataSeriesLength, type, tdps->max_bits);
+		SZ_ReleaseHuffman(huffmanTree);	
+	}
+	else if (tdps->entropyType == 1) {
+		short* type__ = (short*)malloc(dataSeriesLength*sizeof(short));
+		int tmpSize = sz_lossless_decompress(ZSTD_COMPRESSOR, tdps->typeArray, tdps->typeArray_size, (unsigned char **)&type__, dataSeriesLength*sizeof(short));
+		if (tmpSize != dataSeriesLength*sizeof(short)){
+			printf("tmpSize(%d) != dataSeriesLength*sizeof(short)(%lu)",tmpSize,dataSeriesLength*sizeof(short));
+		}
+		for (int i=0; i<dataSeriesLength; i++)
+			type[i] = (int)type__[i];
+		free(type__);
+	}
+	else {
+		decode_with_fse(type, dataSeriesLength, tdps->intervals, tdps->FseCode, tdps->FseCode_size, 
+					tdps->transCodeBits, tdps->transCodeBits_size);
+	}
 
+#ifdef TIMER__
+    huff_cost_end4();
+    printf("[huf/fse]: time=%f\n", huffCost4);
+
+#endif
 	unsigned char preBytes[4];
 	unsigned char curBytes[4];
 

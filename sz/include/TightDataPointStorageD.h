@@ -14,8 +14,11 @@
 extern "C" {
 #endif
 
+#include "zstd/common/bitstream.h"
+
 typedef struct TightDataPointStorageD
 {
+	int entropyType;
 	size_t dataSeriesLength;
 	int allSameData;
 	double realPrecision;
@@ -33,6 +36,12 @@ typedef struct TightDataPointStorageD
 	
 	unsigned char* rtypeArray;
 	size_t rtypeArray_size;
+
+	unsigned char* FseCode; // fse code of tp_code
+	size_t FseCode_size;
+
+	unsigned char* transCodeBits; // extra bitstream of transcoding
+	size_t transCodeBits_size;
 	
 	unsigned char* typeArray; //its size is dataSeriesLength/4 (or xxx/4+1) 
 	size_t typeArray_size;
@@ -91,6 +100,8 @@ void convertTDPStoFlatBytes_double_args(TightDataPointStorageD *tdps, unsigned c
 
 void free_TightDataPointStorageD(TightDataPointStorageD *tdps);
 void free_TightDataPointStorageD2(TightDataPointStorageD *tdps);
+
+void printTDPSD(TightDataPointStorageD *tdps);
 
 #ifdef __cplusplus
 }

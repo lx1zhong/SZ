@@ -111,7 +111,7 @@ int SZ_ReadConf(const char* sz_cfgFile) {
 		confparams_cpr->predThreshold = 0.99;
 		confparams_cpr->sampleDistance = 100;
 
-		confparams_cpr->szMode = SZ_BEST_COMPRESSION;
+		confparams_cpr->szMode = SZ_BEST_COMPRESSION; //SZ_BEST_SPEED;
 		confparams_cpr->losslessCompressor = ZSTD_COMPRESSOR; //other option: GZIP_COMPRESSOR;
 		if(confparams_cpr->losslessCompressor==ZSTD_COMPRESSOR)
 			confparams_cpr->gzipMode = 3; //fast mode

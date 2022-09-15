@@ -152,7 +152,7 @@ am__libSZ_la_SOURCES_DIST = src/MultiLevelCacheTable.c \
 	src/TightDataPointStorageD.c src/TightDataPointStorageF.c \
 	src/conf.c src/DynamicDoubleArray.c src/TypeManager.c \
 	src/dictionary.c src/DynamicFloatArray.c src/VarSet.c \
-	src/callZlib.c src/Huffman.c src/sz_float.c src/sz_double.c \
+	src/callZlib.c src/Huffman.c src/transcode.c src/sz_float.c src/sz_double.c \
 	src/sz_int8.c src/sz_int16.c src/sz_int32.c src/sz_int64.c \
 	src/sz_uint8.c src/sz_uint16.c src/sz_uint32.c src/sz_uint64.c \
 	src/szd_uint8.c src/szd_uint16.c src/szd_uint32.c \
@@ -194,6 +194,7 @@ am_libSZ_la_OBJECTS =  \
 	src/libSZ_la-DynamicFloatArray.lo \
 	src/libSZ_la-VarSet.lo src/libSZ_la-callZlib.lo \
 	src/libSZ_la-Huffman.lo \
+	src/libSZ_la-transcode.lo \
 	src/libSZ_la-sz_float.lo \
 	src/libSZ_la-sz_double.lo \
 	src/libSZ_la-sz_int8.lo \
@@ -619,7 +620,7 @@ libSZ_la_SOURCES = src/MultiLevelCacheTable.c \
 	src/TightDataPointStorageF.c src/conf.c \
 	src/DynamicDoubleArray.c src/TypeManager.c \
 	src/dictionary.c src/DynamicFloatArray.c \
-	src/VarSet.c src/callZlib.c src/Huffman.c \
+	src/VarSet.c src/callZlib.c src/Huffman.c src/transcode.c \
 	src/sz_float.c src/sz_double.c src/sz_int8.c \
 	src/sz_int16.c src/sz_int32.c src/sz_int64.c \
 	src/sz_uint8.c src/sz_uint16.c src/sz_uint32.c \
@@ -1106,6 +1107,10 @@ src/libSZ_la-Huffman.lo: src/Huffman.c
 #	$(AM_V_CC)source='src/Huffman.c' object='src/libSZ_la-Huffman.lo' libtool=yes \
 #	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) \
 #	$(AM_V_CC_no)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libSZ_la_CFLAGS) $(CFLAGS) -c -o src/libSZ_la-Huffman.lo `test -f 'src/Huffman.c' || echo '$(srcdir)/'`src/Huffman.c
+
+src/libSZ_la-transcode.lo: src/transcode.c
+	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libSZ_la_CFLAGS) $(CFLAGS) -MT src/libSZ_la-transcode.lo -MD -MP -MF src/$(DEPDIR)/libSZ_la-transcode.Tpo -c -o src/libSZ_la-transcode.lo `test -f 'src/transcode.c' || echo '$(srcdir)/'`src/transcode.c
+	$(AM_V_at)$(am__mv) src/$(DEPDIR)/libSZ_la-transcode.Tpo src/$(DEPDIR)/libSZ_la-transcode.Plo
 
 src/libSZ_la-sz_float.lo: src/sz_float.c
 	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libSZ_la_CFLAGS) $(CFLAGS) -MT src/libSZ_la-sz_float.lo -MD -MP -MF src/$(DEPDIR)/libSZ_la-sz_float.Tpo -c -o src/libSZ_la-sz_float.lo `test -f 'src/sz_float.c' || echo '$(srcdir)/'`src/sz_float.c

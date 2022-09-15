@@ -2439,10 +2439,13 @@ void SZ_compress_args_double_withinRange(unsigned char** newByteData, double *or
 	TightDataPointStorageD* tdps = (TightDataPointStorageD*) malloc(sizeof(TightDataPointStorageD));
 	tdps->rtypeArray = NULL;
 	tdps->typeArray = NULL;
+	tdps->FseCode = NULL;
+	tdps->transCodeBits = NULL;
 	tdps->leadNumArray = NULL;
 	tdps->residualMidBits = NULL;
 
 	tdps->allSameData = 1;
+	printf("all same data!\n");
 	tdps->dataSeriesLength = dataLength;
 	tdps->exactMidBytes = (unsigned char*)malloc(sizeof(unsigned char)*8);
 	tdps->pwrErrBoundBytes = NULL;

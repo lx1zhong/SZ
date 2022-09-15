@@ -39,6 +39,7 @@ void usage()
 	printf("	-p: print meta data (configuration info)\n");
 	printf("	-h: print the help information\n");
 	printf("	-v: print the version number\n");	
+	printf("	-e: <n>: choose strategy to compress quantification factor. '0' for huffman (default), '1' for zstd and '2' for fse.\n");
 	printf("* data type:\n");
 	printf("	-f: single precision (float type)\n");
 	printf("	-d: double precision (double type)\n");
@@ -98,6 +99,7 @@ int main(int argc, char* argv[])
 	int printMeta = 0;
 	int dataType = 0; //0: single precision ; 1: double precision
 	int tucker = 0; //0: without tucker tensor decomposition preprocessing; 1: with tucker tensor decomposition
+	int entropyType = 0;
 	char* inPath = NULL;
 	char* cmpPath = NULL;
 	char* conPath = NULL;
@@ -148,6 +150,12 @@ int main(int argc, char* argv[])
 			printStats = 1;
 			break;
 #endif			
+		case 'e':
+			if (++i == argc || sscanf(argv[i], "%u", &entropyType) != 1) {
+				usage();
+				exit(0);
+			}
+			break;
 		case 'z':
 			isCompression = 1;
 			if (i+1 < argc)
@@ -322,6 +330,7 @@ int main(int argc, char* argv[])
 	size_t byteLength = 0; 
 	if(isCompression == 1)
 	{
+		confparams_cpr->entropy_type = entropyType;
 		if(absErrorBound != NULL)
 			confparams_cpr->absErrBound = atof(absErrorBound);
 		
@@ -373,7 +382,7 @@ int main(int argc, char* argv[])
 				exit(0);
 			}
 			printf("compression time = %f\n", totalCost);
-			printf("compressed data file: %s\n", outputFilePath);			
+			// printf("compressed data file: %s\n", outputFilePath);			
 
 #ifdef HAVE_WRITESTATS	
 			if(printStats)
@@ -462,7 +471,7 @@ int main(int argc, char* argv[])
 					exit(0);
 				}		
 				printf("compression time = %f\n", totalCost);
-				printf("compressed data file: %s\n", outputFilePath);
+				// printf("compressed data file: %s\n", outputFilePath);
 			}	
 		}
 
@@ -624,7 +633,7 @@ int main(int argc, char* argv[])
 			free(data);	
 			
 			printf("decompression time = %f seconds.\n", totalCost);
-			printf("decompressed data file: %s\n", outputFilePath);							
+			// printf("decompressed data file: %s\n", outputFilePath);							
 		}
 		else //double-data
 		{
@@ -716,7 +725,7 @@ int main(int argc, char* argv[])
 				}
 						
 				printf("decompression time = %f seconds.\n", totalCost);
-				printf("decompressed data file: %s\n", outputFilePath);										
+				// printf("decompressed data file: %s\n", outputFilePath);										
 			}
 			
 			

@@ -15,9 +15,11 @@ extern "C" {
 #endif
 
 #include <stdio.h> 
+#include "zstd/common/bitstream.h"
 
 typedef struct TightDataPointStorageF
 {
+	int entropyType;
 	size_t dataSeriesLength;
 	int allSameData;
 	double realPrecision; //it's used as the pwrErrBoundRatio when errBoundMode==PW_REL
@@ -35,6 +37,12 @@ typedef struct TightDataPointStorageF
 	size_t rtypeArray_size;
 	
 	float minLogValue;
+
+	unsigned char* FseCode; // fse code of tp_code
+	size_t FseCode_size;
+
+	unsigned char* transCodeBits; // extra bitstream of transcoding
+	size_t transCodeBits_size;
 
 	unsigned char* typeArray; //its size is dataSeriesLength/4 (or xxx/4+1) 
 	size_t typeArray_size;
@@ -97,6 +105,8 @@ void convertTDPStoFlatBytes_float_args(TightDataPointStorageF *tdps, unsigned ch
 
 void free_TightDataPointStorageF(TightDataPointStorageF *tdps);
 void free_TightDataPointStorageF2(TightDataPointStorageF *tdps);
+
+void printTDPS(TightDataPointStorageF *tdps);
 
 #ifdef __cplusplus
 }

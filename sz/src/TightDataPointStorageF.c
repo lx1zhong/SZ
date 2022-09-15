@@ -13,7 +13,12 @@
 #include "TightDataPointStorageF.h"
 #include "sz.h"
 #include "Huffman.h"
+#include "transcode.h"
+#include "zstd/common/fse.h"
+#include <sys/time.h>
 //#include "rw.h"
+
+// #define USE_HUFFMAN 0
 
 void new_TightDataPointStorageF_Empty(TightDataPointStorageF **this)
 {
@@ -24,9 +29,16 @@ void new_TightDataPointStorageF_Empty(TightDataPointStorageF **this)
 	(*this)->reservedValue = 0;
 	(*this)->reqLength = 0;
 	(*this)->radExpo = 0;
+	(*this)->entropyType = 0;
 
 	(*this)->rtypeArray = NULL;
 	(*this)->rtypeArray_size = 0;
+
+	(*this)->FseCode = NULL;
+	(*this)->FseCode_size = 0;
+
+	(*this)->transCodeBits = NULL;
+	(*this)->transCodeBits_size = 0;
 
 	(*this)->typeArray = NULL; //its size is dataSeriesLength/4 (or xxx/4+1) 
 	(*this)->typeArray_size = 0;
@@ -70,6 +82,7 @@ int new_TightDataPointStorageF_fromFlatBytes(TightDataPointStorageF **this, unsi
 	}
 															      //note that 1000,0000 is reserved for regression tag.
 	int same = sameRByte & 0x01; 											//0000,0001
+	(*this)->entropyType = (sameRByte & 0x06)>>1; 							//0000,0110
 	(*this)->isLossless = (sameRByte & 0x10)>>4; 							//0001,0000
 	int isPW_REL = (sameRByte & 0x20)>>5; 									//0010,0000
 	exe_params->SZ_SIZE_TYPE = ((sameRByte & 0x40)>>6)==1?8:4; 				//0100,0000
@@ -171,9 +184,19 @@ int new_TightDataPointStorageF_fromFlatBytes(TightDataPointStorageF **this, unsi
 		byteBuf[i] = flatBytes[index++];
 	(*this)->realPrecision = bytesToDouble(byteBuf);//8
 
-	for (i = 0; i < exe_params->SZ_SIZE_TYPE; i++)
-		byteBuf[i] = flatBytes[index++];
-	(*this)->typeArray_size = bytesToSize(byteBuf);// 4		
+	if ((*this)->entropyType <=1 ) {
+		for (i = 0; i < exe_params->SZ_SIZE_TYPE; i++)
+			byteBuf[i] = flatBytes[index++];
+		(*this)->typeArray_size = bytesToSize(byteBuf);// 4	
+	} else {
+		for (i = 0; i < exe_params->SZ_SIZE_TYPE; i++)
+			byteBuf[i] = flatBytes[index++];
+		(*this)->FseCode_size = bytesToSize(byteBuf);// 4
+		for (i = 0; i < exe_params->SZ_SIZE_TYPE; i++)
+			byteBuf[i] = flatBytes[index++];
+		(*this)->transCodeBits_size = bytesToSize(byteBuf);// 4
+	}
+
 	if(rtype_!=0)
 	{
 		for(i = 0;i<exe_params->SZ_SIZE_TYPE;i++) 
@@ -219,17 +242,29 @@ int new_TightDataPointStorageF_fromFlatBytes(TightDataPointStorageF **this, unsi
 	if ((*this)->rtypeArray != NULL) 
 	{
 		(*this)->residualMidBits_size = flatBytesLength - 3 - 1 - MetaDataByteLength - exe_params->SZ_SIZE_TYPE - 4 - radExpoL - segmentL - pwrErrBoundBytesL - 4 - 4 - 1 - 8 
-				- exe_params->SZ_SIZE_TYPE - exe_params->SZ_SIZE_TYPE - exe_params->SZ_SIZE_TYPE - minLogValueSize - exe_params->SZ_SIZE_TYPE - 4 - (*this)->rtypeArray_size
-				- minLogValueSize - (*this)->typeArray_size - (*this)->leadNumArray_size
+				- exe_params->SZ_SIZE_TYPE - exe_params->SZ_SIZE_TYPE - minLogValueSize - exe_params->SZ_SIZE_TYPE - 4 - (*this)->rtypeArray_size
+				- minLogValueSize - (*this)->leadNumArray_size
 				- (*this)->exactMidBytes_size - pwrErrBoundBytes_size - 1 - 1;
+		if ((*this)->entropyType <= 1) {
+			(*this)->residualMidBits_size = (*this)->residualMidBits_size - (*this)->typeArray_size - exe_params->SZ_SIZE_TYPE;
+		} else {
+			(*this)->residualMidBits_size = (*this)->residualMidBits_size - (*this)->FseCode_size - (*this)->transCodeBits_size - exe_params->SZ_SIZE_TYPE - exe_params->SZ_SIZE_TYPE;
+		}
 		for (i = 0; i < (*this)->rtypeArray_size; i++)
 			(*this)->rtypeArray[i] = flatBytes[index++];
 	}
 	else
 	{
 		(*this)->residualMidBits_size = flatBytesLength - 3 - 1 - MetaDataByteLength - exe_params->SZ_SIZE_TYPE - 4 - radExpoL - segmentL - pwrErrBoundBytesL - 4 - 4 - 1 - 8 
-				- exe_params->SZ_SIZE_TYPE - exe_params->SZ_SIZE_TYPE - exe_params->SZ_SIZE_TYPE - minLogValueSize - (*this)->typeArray_size
+				- exe_params->SZ_SIZE_TYPE - exe_params->SZ_SIZE_TYPE - minLogValueSize
 				- (*this)->leadNumArray_size - (*this)->exactMidBytes_size - pwrErrBoundBytes_size - 1 - 1;
+		if ((*this)->entropyType <= 1) {
+			(*this)->residualMidBits_size = (*this)->residualMidBits_size - (*this)->typeArray_size - exe_params->SZ_SIZE_TYPE;
+		} else {
+			(*this)->residualMidBits_size = (*this)->residualMidBits_size - (*this)->FseCode_size - (*this)->transCodeBits_size - exe_params->SZ_SIZE_TYPE - exe_params->SZ_SIZE_TYPE;
+		}
+		// printf("totalByteLength=%lu\n",flatBytesLength);
+		// printf("residualMidBits_size2 = %lu\n", (*this)->residualMidBits_size);
 	}
 
 	if(errorBoundMode>=PW_REL)
@@ -238,12 +273,22 @@ int new_TightDataPointStorageF_fromFlatBytes(TightDataPointStorageF **this, unsi
 		index+=4;
 	}
 
-	(*this)->typeArray = &flatBytes[index]; 
-	//retrieve the number of states (i.e., stateNum)
-	(*this)->allNodes = bytesToInt_bigEndian((*this)->typeArray); //the first 4 bytes store the stateNum
-	(*this)->stateNum = ((*this)->allNodes+1)/2;	
+	if ((*this)->entropyType <= 1) {
+		(*this)->typeArray = &flatBytes[index]; 
+		//retrieve the number of states (i.e., stateNum)
+		if((*this)->entropyType == 0) {
+			(*this)->allNodes = bytesToInt_bigEndian((*this)->typeArray); //the first 4 bytes store the stateNum
+			(*this)->stateNum = ((*this)->allNodes+1)/2;	
+		}
+		index+=(*this)->typeArray_size;
+	} else {
+		(*this)->FseCode = &flatBytes[index]; 
+		index+=(*this)->FseCode_size;
 
-	index+=(*this)->typeArray_size;
+		(*this)->transCodeBits = &flatBytes[index]; 
+		index+=(*this)->transCodeBits_size;
+	}
+	
 	
 	(*this)->pwrErrBoundBytes = &flatBytes[index];
 	
@@ -260,8 +305,29 @@ int new_TightDataPointStorageF_fromFlatBytes(TightDataPointStorageF **this, unsi
 	(*this)->residualMidBits = &flatBytes[index];
 	
 	//index+=(*this)->residualMidBits_size;
-	
+	// printTDPS(*this);
 	return errorBoundMode;
+}
+
+struct timeval startTime;
+struct timeval endTime;  /* Start and end times */
+struct timeval Start; /*only used for recording the cost*/
+double huffCost = 0;
+
+
+void huff_cost_start()
+{
+	huffCost = 0;
+	gettimeofday(&Start, NULL);
+}
+
+void huff_cost_end()
+{
+	double elapsed;
+	struct timeval costEnd;
+	gettimeofday(&costEnd, NULL);
+	elapsed = ((costEnd.tv_sec*1000000+costEnd.tv_usec)-(Start.tv_sec*1000000+Start.tv_usec))/1000000.0;
+	huffCost += elapsed;
 }
 
 /**
@@ -282,6 +348,7 @@ void new_TightDataPointStorageF(TightDataPointStorageF **this,
 		unsigned char* pwrErrBoundBytes, size_t pwrErrBoundBytes_size, unsigned char radExpo) {
 	
 	*this = (TightDataPointStorageF *)malloc(sizeof(TightDataPointStorageF));
+	(*this)->entropyType = confparams_cpr->entropy_type;
 	(*this)->allSameData = 0;
 	(*this)->realPrecision = realPrecision;
 	(*this)->medianValue = medianValue;
@@ -290,16 +357,67 @@ void new_TightDataPointStorageF(TightDataPointStorageF **this,
 	(*this)->dataSeriesLength = dataSeriesLength;
 	(*this)->exactDataNum = exactDataNum;
 
+	(*this)->typeArray = NULL;
+
+	(*this)->FseCode = NULL;
+	(*this)->FseCode_size = 0;
+
+	(*this)->transCodeBits = NULL;
+	(*this)->transCodeBits_size = 0;
+
 	(*this)->rtypeArray = NULL;
 	(*this)->rtypeArray_size = 0;
 
 	int stateNum = 2*intervals;
-	HuffmanTree* huffmanTree = createHuffmanTree(stateNum);
-	if(confparams_cpr->errorBoundMode == PW_REL && confparams_cpr->accelerate_pw_rel_compression)
-		(*this)->max_bits = encode_withTree_MSST19(huffmanTree, type, dataSeriesLength, &(*this)->typeArray, &(*this)->typeArray_size);
-	else
-		encode_withTree(huffmanTree, type, dataSeriesLength, &(*this)->typeArray, &(*this)->typeArray_size);
-	SZ_ReleaseHuffman(huffmanTree);
+	printf("intervals=%u\n", intervals);
+
+	if ((*this)->entropyType == 0) {
+		// huffman
+		huff_cost_start();
+		HuffmanTree* huffmanTree = createHuffmanTree(stateNum);
+		if(confparams_cpr->errorBoundMode == PW_REL && confparams_cpr->accelerate_pw_rel_compression)
+			(*this)->max_bits = encode_withTree_MSST19(huffmanTree, type, dataSeriesLength, &(*this)->typeArray, &(*this)->typeArray_size);
+		else
+			encode_withTree(huffmanTree, type, dataSeriesLength, &(*this)->typeArray, &(*this)->typeArray_size);
+		SZ_ReleaseHuffman(huffmanTree);
+
+		huff_cost_end();
+		printf("[huffman]: \toutsize=%lu, time=%f\n", (*this)->typeArray_size, huffCost);
+		// printf("huff: time=%f\n", huffCost);
+	} 
+	else if ((*this)->entropyType == 1) {
+		// zstd
+		huff_cost_start();
+		unsigned short *temp = (unsigned short* )malloc(sizeof(unsigned short) * dataSeriesLength);
+		for (int i = 0; i < dataSeriesLength; i++) {
+			temp[i] = (unsigned short)type[i];
+		}
+		// FILE *fp = fopen("/home/lxzhong/tmp/type_array.bin", "wb");
+		// fwrite((void *)temp, sizeof(unsigned short), dataSeriesLength, fp);
+		// fclose(fp);
+
+		// confparams_cpr->gzipMode = 1;
+		// printf("confparams_cpr->gzipMode=%d", confparams_cpr->gzipMode);
+		(*this)->typeArray_size = sz_lossless_compress(ZSTD_COMPRESSOR, confparams_cpr->gzipMode, (unsigned char *)temp, dataSeriesLength * 2, &(*this)->typeArray);
+		huff_cost_end();
+		printf("[zstd]: \toutsize=%lu, time=%f\n", (*this)->typeArray_size, huffCost);
+		
+		free(temp);
+	}
+	else {
+		// fse
+		huff_cost_start();
+		encode_with_fse(type, dataSeriesLength, intervals, &((*this)->FseCode), &((*this)->FseCode_size), 
+					&((*this)->transCodeBits), &((*this)->transCodeBits_size));
+		huff_cost_end();
+		printf("[fse]: \t\toutsize=%lu, time=%f\n", (*this)->FseCode_size+(*this)->transCodeBits_size+4+4, huffCost);
+		// printf("fse: time=%f\n", huffCost);
+
+		// int* type2 = (int*)malloc(dataSeriesLength*sizeof(int));
+		// decode_with_fse((*this), dataSeriesLength, type2);
+		// printf("max_type=%d, min_type=%d\n", max_type, min_type);
+	}
+
 		
 	(*this)->exactMidBytes = exactMidBytes;
 	(*this)->exactMidBytes_size = exactMidBytes_size;
@@ -340,13 +458,62 @@ void new_TightDataPointStorageF2(TightDataPointStorageF **this,
 	(*this)->dataSeriesLength = dataSeriesLength;
 	(*this)->exactDataNum = exactDataNum;
 
+	(*this)->typeArray = NULL;
+
+	(*this)->FseCode = NULL;
+	(*this)->FseCode_size = 0;
+
+	(*this)->transCodeBits = NULL;
+	(*this)->transCodeBits_size = 0;
+
 	(*this)->rtypeArray = NULL;
 	(*this)->rtypeArray_size = 0;
 
 	int stateNum = 2*intervals;
-	HuffmanTree* huffmanTree = createHuffmanTree(stateNum);
-	encode_withTree(huffmanTree, type, dataSeriesLength, &(*this)->typeArray, &(*this)->typeArray_size);
-	SZ_ReleaseHuffman(huffmanTree);
+	if ((*this)->entropyType == 0) {
+		// huffman
+		huff_cost_start();
+		HuffmanTree* huffmanTree = createHuffmanTree(stateNum);
+		encode_withTree(huffmanTree, type, dataSeriesLength, &(*this)->typeArray, &(*this)->typeArray_size);
+		SZ_ReleaseHuffman(huffmanTree);
+
+
+		huff_cost_end();
+		printf("[huffman]: \toutsize=%lu, time=%f\n", (*this)->typeArray_size, huffCost);
+		// printf("huff: time=%f\n", huffCost);
+	} 
+	else if ((*this)->entropyType == 1) {
+		// zstd
+		huff_cost_start();
+		unsigned short *temp = (unsigned short* )malloc(sizeof(unsigned short) * dataSeriesLength);
+		for (int i = 0; i < dataSeriesLength; i++) {
+			temp[i] = (unsigned short)type[i];
+		}
+		// FILE *fp = fopen("/home/lxzhong/tmp/type_array.bin", "wb");
+		// fwrite((void *)temp, sizeof(unsigned short), dataSeriesLength, fp);
+		// fclose(fp);
+
+		// confparams_cpr->gzipMode = 1;
+		// printf("confparams_cpr->gzipMode=%d", confparams_cpr->gzipMode);
+		(*this)->typeArray_size = sz_lossless_compress(ZSTD_COMPRESSOR, confparams_cpr->gzipMode, (unsigned char *)temp, dataSeriesLength * 2, &(*this)->typeArray);
+		huff_cost_end();
+		printf("[zstd]: \toutsize=%lu, time=%f\n", (*this)->typeArray_size, huffCost);
+		
+		free(temp);
+	}
+	else {
+		// fse
+		huff_cost_start();
+		encode_with_fse(type, dataSeriesLength, intervals, &((*this)->FseCode), &((*this)->FseCode_size), 
+					&((*this)->transCodeBits), &((*this)->transCodeBits_size));
+		huff_cost_end();
+		printf("[fse]: \t\toutsize=%lu, time=%f\n", (*this)->FseCode_size+(*this)->transCodeBits_size+4+4, huffCost);
+		// printf("fse: time=%f\n", huffCost);
+
+		// int* type2 = (int*)malloc(dataSeriesLength*sizeof(int));
+		// decode_with_fse((*this), dataSeriesLength, type2);
+		// printf("max_type=%d, min_type=%d\n", max_type, min_type);
+	}
 	
 	(*this)->exactMidBytes = exactMidBytes;
 	(*this)->exactMidBytes_size = exactMidBytes_size;
@@ -380,6 +547,8 @@ void convertTDPStoBytes_float(TightDataPointStorageF* tdps, unsigned char* bytes
 	unsigned char exactLengthBytes[8];
 	unsigned char exactMidBytesLength[8];
 	unsigned char realPrecisionBytes[8];
+	unsigned char fsecodeLengthBytes[8];
+	unsigned char transcodeLengthBytes[8];
 	
 	unsigned char medianValueBytes[4];
 	
@@ -433,11 +602,22 @@ void convertTDPStoBytes_float(TightDataPointStorageF* tdps, unsigned char* bytes
 	doubleToBytes(realPrecisionBytes, tdps->realPrecision);
 
 	for (i = 0; i < 8; i++)// 8
-		bytes[k++] = realPrecisionBytes[i];			
+		bytes[k++] = realPrecisionBytes[i];	  
 
-	sizeToBytes(typeArrayLengthBytes, tdps->typeArray_size);
-	for(i = 0;i<exe_params->SZ_SIZE_TYPE;i++)//ST
-		bytes[k++] = typeArrayLengthBytes[i];
+	if (tdps->entropyType <= 1) {
+		sizeToBytes(typeArrayLengthBytes, tdps->typeArray_size);
+		for(i = 0;i<exe_params->SZ_SIZE_TYPE;i++)//ST
+			bytes[k++] = typeArrayLengthBytes[i];
+	} else {
+		sizeToBytes(fsecodeLengthBytes, tdps->FseCode_size);
+		for(i = 0;i<exe_params->SZ_SIZE_TYPE;i++)//ST
+			bytes[k++] = fsecodeLengthBytes[i];	
+
+		sizeToBytes(transcodeLengthBytes, tdps->transCodeBits_size);
+		for(i = 0;i<exe_params->SZ_SIZE_TYPE;i++)//ST
+			bytes[k++] = transcodeLengthBytes[i];
+	}
+
 
 	sizeToBytes(exactLengthBytes, tdps->exactDataNum);
 	for(i = 0;i<exe_params->SZ_SIZE_TYPE;i++)//ST
@@ -454,8 +634,16 @@ void convertTDPStoBytes_float(TightDataPointStorageF* tdps, unsigned char* bytes
 			bytes[k++] = exactMidBytesLength[i];
 	}
 
-	memcpy(&(bytes[k]), tdps->typeArray, tdps->typeArray_size);
-	k += tdps->typeArray_size;
+	if (tdps->entropyType <= 1) {
+		memcpy(&(bytes[k]), tdps->typeArray, tdps->typeArray_size);
+		k += tdps->typeArray_size;
+	} else {
+		memcpy(&(bytes[k]), tdps->FseCode, tdps->FseCode_size);
+		k += tdps->FseCode_size;
+		memcpy(&(bytes[k]), tdps->transCodeBits, tdps->transCodeBits_size);
+		k += tdps->transCodeBits_size;
+	}
+	
 	if(confparams_cpr->errorBoundMode>=PW_REL)
 	{
 		memcpy(&(bytes[k]), tdps->pwrErrBoundBytes, tdps->pwrErrBoundBytes_size);
@@ -585,6 +773,7 @@ void convertTDPStoBytes_float_reserve(TightDataPointStorageF* tdps, unsigned cha
 //convert TightDataPointStorageD to bytes...
 void convertTDPStoFlatBytes_float(TightDataPointStorageF *tdps, unsigned char** bytes, size_t *size)
 {
+	// printTDPS(tdps);
 	size_t i, k = 0; 
 	unsigned char dsLengthBytes[8];
 	
@@ -595,6 +784,7 @@ void convertTDPStoFlatBytes_float(TightDataPointStorageF *tdps, unsigned char** 
 		
 	unsigned char sameByte = tdps->allSameData==1?(unsigned char)1:(unsigned char)0; //0000,0001
 	//sameByte = sameByte | (confparams_cpr->szMode << 1);  //0000,0110 (no need because of convertSZParamsToBytes
+	sameByte = sameByte | (tdps->entropyType << 1);   //0000,0110
 	if(tdps->isLossless)
 		sameByte = (unsigned char) (sameByte | 0x10);  // 0001,0000
 	if(confparams_cpr->errorBoundMode>=PW_REL)
@@ -640,11 +830,17 @@ void convertTDPStoFlatBytes_float(TightDataPointStorageF *tdps, unsigned char** 
 		}
 
 		size_t totalByteLength = 3 + 1 + MetaDataByteLength + exe_params->SZ_SIZE_TYPE + 4 + radExpoL + segmentL + pwrBoundArrayL + 4 + 4 + 1 + 8 
-				+ exe_params->SZ_SIZE_TYPE + exe_params->SZ_SIZE_TYPE + exe_params->SZ_SIZE_TYPE + minLogValueSize
-				+ tdps->typeArray_size + tdps->leadNumArray_size 
+				+ exe_params->SZ_SIZE_TYPE + exe_params->SZ_SIZE_TYPE + minLogValueSize
+				+ tdps->leadNumArray_size 
 				+ tdps->exactMidBytes_size + residualMidBitsLength + tdps->pwrErrBoundBytes_size;
+		if (tdps->entropyType <= 1) {
+			totalByteLength += tdps->typeArray_size + exe_params->SZ_SIZE_TYPE;
+		} else {
+			totalByteLength += tdps->FseCode_size + tdps->transCodeBits_size + exe_params->SZ_SIZE_TYPE + exe_params->SZ_SIZE_TYPE;
+		}
 		if(confparams_cpr->errorBoundMode == PW_REL && confparams_cpr->accelerate_pw_rel_compression)
 			totalByteLength += (1+1); // for MSST19
+		printf("totalByteLength=%lu\n",totalByteLength);
 
 		*bytes = (unsigned char *)malloc(sizeof(unsigned char)*totalByteLength);
 
@@ -669,7 +865,9 @@ void convertTDPStoFlatBytes_float_args(TightDataPointStorageF *tdps, unsigned ch
 		longToBytes_bigEndian(dsLengthBytes, tdps->dataSeriesLength);//8
 		
 	unsigned char sameByte = tdps->allSameData==1?(unsigned char)1:(unsigned char)0;
-	sameByte = sameByte | (confparams_cpr->szMode << 1);
+	
+	// sameByte = sameByte | (confparams_cpr->szMode << 1);
+	sameByte = sameByte | (tdps->entropyType << 1);   //0000,0110
 	if(tdps->isLossless)
 		sameByte = (unsigned char) (sameByte | 0x10);
 	if(confparams_cpr->errorBoundMode>=PW_REL)
@@ -729,9 +927,13 @@ void convertTDPStoFlatBytes_float_args(TightDataPointStorageF *tdps, unsigned ch
  * to free the memory used in the compression
  * */
 void free_TightDataPointStorageF(TightDataPointStorageF *tdps)
-{
+{	
 	if(tdps->rtypeArray!=NULL)
 		free(tdps->rtypeArray);
+	if(tdps->FseCode!=NULL)
+		free(tdps->FseCode);
+	if(tdps->transCodeBits!=NULL)
+		free(tdps->transCodeBits);
 	if(tdps->typeArray!=NULL)
 		free(tdps->typeArray);
 	if(tdps->leadNumArray!=NULL)
@@ -751,4 +953,22 @@ void free_TightDataPointStorageF(TightDataPointStorageF *tdps)
 void free_TightDataPointStorageF2(TightDataPointStorageF *tdps)
 {			
 	free(tdps);
+}
+
+void printTDPS(TightDataPointStorageF *tdps) {
+	printf("================TDPS states===============\n");
+	printf("isLossless:%d\n",tdps->isLossless);
+	printf("intervals:%u\n",tdps->intervals);
+	printf("dataSeriesLength:%lu\n",tdps->dataSeriesLength);
+	printf("entropyType:%d\n",tdps->entropyType);
+	printf("exactDataNum:%lu\n",tdps->exactDataNum);
+	printf("typeArray_size:%lu\n",tdps->typeArray_size);
+	printf("FseCode_size:%lu\n",tdps->FseCode_size);
+	printf("transCodeBits_size:%lu\n",tdps->transCodeBits_size);
+	printf("leadNumArray_size:%lu\n",tdps->leadNumArray_size);
+	printf("exactMidBytes_size:%lu\n",tdps->exactMidBytes_size);
+	printf("residualMidBitsLength:%lu\n",tdps->residualMidBits == NULL ? 0 : tdps->residualMidBits_size);
+	printf("pwrErrBoundBytes_size:%d\n",tdps->pwrErrBoundBytes_size);
+	printf("==========================================\n");
+	
 }

@@ -33,6 +33,27 @@
 #include "CacheTable.h"
 #include "MultiLevelCacheTableWideInterval.h"
 #include "sz_stats.h"
+#include <sys/time.h>
+
+
+struct timeval Start5; /*only used for recording the cost*/
+double huffCost5 = 0;
+
+
+void huff_cost_start5()
+{
+	huffCost5 = 0;
+	gettimeofday(&Start5, NULL);
+}
+
+void huff_cost_end5()
+{
+	double elapsed;
+	struct timeval costEnd;
+	gettimeofday(&costEnd, NULL);
+	elapsed = ((costEnd.tv_sec*1000000+costEnd.tv_usec)-(Start5.tv_sec*1000000+Start5.tv_usec))/1000000.0;
+	huffCost5 += elapsed;
+}
 
 unsigned char* SZ_skip_compress_float(float* data, size_t dataLength, size_t* outSize)
 {
@@ -421,7 +442,7 @@ size_t dataLength, float realPrecision, float valueRangeSize, float medianValue_
 		decData[1] = vce->data;
 #endif
 	int state;
-	float checkRadius;
+	float checkRadius;					// 最大误差半径
 	float curData;
 	float pred = last3CmprsData[0];
 	float predAbsErr;
@@ -598,6 +619,7 @@ size_t dataLength, double realPrecision, size_t *outSize, float valueRangeSize, 
 #endif
 		tdps = SZ_compress_float_1D_MDQ(oriData, dataLength, realPrecision, valueRangeSize, medianValue_f);
 
+	printf("islossless=%d\n", tdps->isLossless);
 	convertTDPStoFlatBytes_float(tdps, newByteData, outSize);
 
 	if(*outSize>3 + MetaDataByteLength + exe_params->SZ_SIZE_TYPE + 1 + sizeof(float)*dataLength)
@@ -2718,10 +2740,13 @@ void SZ_compress_args_float_withinRange(unsigned char** newByteData, float *oriD
 	TightDataPointStorageF* tdps = (TightDataPointStorageF*) malloc(sizeof(TightDataPointStorageF));
 	tdps->rtypeArray = NULL;
 	tdps->typeArray = NULL;
+	tdps->FseCode = NULL;
+	tdps->transCodeBits = NULL;
 	tdps->leadNumArray = NULL;
 	tdps->residualMidBits = NULL;
 
 	tdps->allSameData = 1;
+	printf("all same data!\n");
 	tdps->dataSeriesLength = dataLength;
 	tdps->exactMidBytes = (unsigned char*)malloc(sizeof(unsigned char)*4);
 	tdps->pwrErrBoundBytes = NULL;
@@ -3014,7 +3039,10 @@ int errBoundMode, double absErr_Bound, double relBoundRatio, double pwRelBoundRa
 		}
 		else if(confparams_cpr->szMode==SZ_BEST_COMPRESSION || confparams_cpr->szMode==SZ_DEFAULT_COMPRESSION || confparams_cpr->szMode==SZ_TEMPORAL_COMPRESSION)
 		{
+			// huff_cost_start5();
 			*outSize = sz_lossless_compress(confparams_cpr->losslessCompressor, confparams_cpr->gzipMode, tmpByteData, tmpOutSize, newByteData);
+    		// huff_cost_end5();
+    		// printf("[zstd_]: time=%f\n", huffCost5);
 			free(tmpByteData);
 		}
 		else
