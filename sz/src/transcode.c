@@ -147,21 +147,21 @@ void encode_with_fse(int *type, size_t dataSeriesLength, unsigned int intervals,
     printf("[fse-2]: encode time=%f\n", huffCost3);
 #endif
 
-    // FILE *f0 = fopen("/home/lxzhong/tmp/type_array.bin","wb");
+    // FILE *f0 = fopen("/home/zhongyu/tmp/type_array.bin","wb");
     // fwrite(type, sizeof(int), dataSeriesLength, f0);
     // fclose(f0);
 
-    // FILE *f1 = fopen("/home/lxzhong/tmp/tp_code.txt","w");
+    // FILE *f1 = fopen("/home/zhongyu/tmp/tp_code.txt","w");
     // for (int j=0; j<dataSeriesLength; j++) {
     // 	fprintf(f1, "%d ", (int)tp_code[j]);
     // }
     // fclose(f1);
 
-    // FILE *f2 = fopen("/home/lxzhong/tmp/fse.bin","wb");
+    // FILE *f2 = fopen("/home/zhongyu/tmp/fse.bin","wb");
     // fwrite((*FseCode), 1, fse_size, f2);
     // fclose(f2);
 
-    // FILE *f3 = fopen("/home/lxzhong/tmp/transCodeBits.bin","wb");
+    // FILE *f3 = fopen("/home/zhongyu/tmp/transCodeBits.bin","wb");
     // fwrite((*transCodeBits), 1, streamSize, f3);
     // fclose(f3);
 
@@ -185,6 +185,11 @@ void decode_with_fse(int *type, size_t dataSeriesLength, unsigned int intervals,
 
     uint8_t *tp_code = (uint8_t *)malloc(dataSeriesLength);
 
+    if (FseCode_size <= 1) {
+        // type都为0
+        memset((void *)type, 0, sizeof(int) * dataSeriesLength);
+        return;
+    }
     size_t fse_size = FSE_decompress(tp_code, dataSeriesLength, FseCode, FseCode_size);
     if (FSE_isError(fse_size)) {
         printf("decode:FSE_isError!\n");
@@ -252,7 +257,7 @@ void decode_with_fse(int *type, size_t dataSeriesLength, unsigned int intervals,
     printf("[fse-3]: transcode time=%f\n", huffCost3);
 #endif
     
-    // FILE *f0 = fopen("/home/lxzhong/tmp/type_array2.bin","wb");
+    // FILE *f0 = fopen("/home/zhongyu/tmp/type_array2.bin","wb");
     // fwrite(type, sizeof(int), dataSeriesLength, f0);
     // fclose(f0);
 
