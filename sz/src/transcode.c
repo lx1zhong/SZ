@@ -66,8 +66,8 @@ void encode_with_fse(int *type, size_t dataSeriesLength, unsigned int intervals,
 
     BIT_CStream_t transCodeStream;
     int dstCapacity = dataSeriesLength * sizeof(int);
-    void *tmp = malloc(dstCapacity);
-    BIT_initCStream(&transCodeStream, tmp, dstCapacity);
+    (*transCodeBits) = (unsigned char *)malloc(dstCapacity);
+    BIT_initCStream(&transCodeStream, (*transCodeBits), dstCapacity);
 
 #ifdef TIMER__
 	huff_cost_start3();
@@ -122,8 +122,8 @@ void encode_with_fse(int *type, size_t dataSeriesLength, unsigned int intervals,
 	huff_cost_start3();
 #endif
 
-    (*FseCode) = (unsigned char*)malloc(dataSeriesLength);
-    size_t fse_size = FSE_compress((*FseCode), dataSeriesLength, tp_code, dataSeriesLength);
+    (*FseCode) = (unsigned char*)malloc(2 * dataSeriesLength);
+    size_t fse_size = FSE_compress((*FseCode), 2 * dataSeriesLength, tp_code, dataSeriesLength);
     if (FSE_isError(fse_size)) {
         printf("encode:FSE_isError!\n");
         // exit(1);
@@ -138,9 +138,6 @@ void encode_with_fse(int *type, size_t dataSeriesLength, unsigned int intervals,
         printf("too small!\n");   /* not enough space */
         exit(1);
     }
-    (*transCodeBits) = malloc(streamSize);
-    memcpy((*transCodeBits), tmp, streamSize);
-    free(tmp);
     
 #ifdef TIMER__
     huff_cost_end3();
@@ -252,6 +249,7 @@ void decode_with_fse(int *type, size_t dataSeriesLength, unsigned int intervals,
 		// printf(" %d:factor=%d, base=%d, nbits=%d, tp_code=%d, diff=%d\n", i, factor, base, nbits, tp_code[i], diff);
     }
     
+    free(tp_code);
 #ifdef TIMER__
     huff_cost_end3();
     printf("[fse-3]: transcode time=%f\n", huffCost3);
