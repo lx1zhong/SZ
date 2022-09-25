@@ -36,7 +36,7 @@
 #include <sys/time.h>
 #include "transcode.h"
 
-#define DISTANCE 1
+#define DISTANCE 100
 
 
 struct timeval Start5; /*only used for recording the cost*/
@@ -1967,7 +1967,10 @@ float predict_compressRatio_float_1D_opt_MSST19(float *oriData, size_t dataLengt
 	float pred_value = 0;
 	double pred_err;				
 	unsigned int Distance = DISTANCE;  	// 采样间隔
-	int *type = (int *)malloc(dataLength / Distance * sizeof(int) * 2); 
+	int *type = (int *)malloc(dataLength / Distance * sizeof(int)); 
+	unsigned char *sign = (unsigned char *)malloc(dataLength / Distance * sizeof(unsigned char));
+	int positive = true;
+
 	size_t totalSampleSize = 0;//dataLength/confparams_cpr->sampleDistance;
 
 	// definitions of unpredictable data
@@ -1993,8 +1996,6 @@ float predict_compressRatio_float_1D_opt_MSST19(float *oriData, size_t dataLengt
 
 	FloatValueCompressElement *vce = (FloatValueCompressElement*)malloc(sizeof(FloatValueCompressElement));
 	LossyCompressionElement *lce = (LossyCompressionElement*)malloc(sizeof(LossyCompressionElement));
-
-
 	
 	float *data_pos = oriData + Distance;
 	float divider = log2(1+realPrecision)*2;
@@ -2004,6 +2005,10 @@ float predict_compressRatio_float_1D_opt_MSST19(float *oriData, size_t dataLengt
     		data_pos += Distance;
             continue;
 		}
+        if(*data_pos < 0){
+            sign[totalSampleSize] = 1;
+            positive = false;
+        }
 	    tempIndex++;
 		pred_value = data_pos[-1];
 		pred_err = fabs((double)*data_pos / pred_value);
@@ -2042,6 +2047,13 @@ float predict_compressRatio_float_1D_opt_MSST19(float *oriData, size_t dataLengt
 			resiBitsLength,
 			realPrecision, medianValue, (char)reqLength, quantization_intervals, NULL, 0, 0);
 
+	if(!positive){
+		unsigned char * comp_signs;
+		// compress signs
+		unsigned long signSize = sz_lossless_compress(ZSTD_COMPRESSOR, 3, sign, totalSampleSize, &comp_signs);
+		tdps->pwrErrBoundBytes = comp_signs;
+		tdps->pwrErrBoundBytes_size = signSize;
+	}
 	unsigned char *tmpCompBytes;
 	size_t tmpOutSize;
 	convertTDPStoFlatBytes_float(tdps, &tmpCompBytes, &tmpOutSize);
