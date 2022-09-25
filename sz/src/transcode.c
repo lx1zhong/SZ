@@ -84,7 +84,7 @@ void encode_with_fse(int *type, size_t dataSeriesLength, unsigned int intervals,
         diff[i] = i - md - code2int[type2code[i]][0];
     }
     for (int i=md-1; i>0; i--) {
-        type2code[i] = 67-type2code[2*md-i];
+        type2code[i] = TOTAL_CODE_NUM-type2code[2*md-i];
         diff[i] = diff[2*md-i];
     }
 
@@ -102,7 +102,7 @@ void encode_with_fse(int *type, size_t dataSeriesLength, unsigned int intervals,
         // 	min_type = type[i];
         if (type[i] == 0) {
             // unpredictable data
-            tp_code[i] = 67;
+            tp_code[i] = TOTAL_CODE_NUM;
             nbits = 0;
         }
         else {
@@ -212,8 +212,8 @@ void decode_with_fse(int *type, size_t dataSeriesLength, unsigned int intervals,
     int md = intervals / 2;
     // printf("intervals = %u\n", intervals);
 
-    int code2type[67];
-    for (int i=0; i<67; i++) {
+    int code2type[TOTAL_CODE_NUM];
+    for (int i=0; i<TOTAL_CODE_NUM; i++) {
         code2type[i] = code2int[i][0] + md;
     }
 #ifdef TIMER__
@@ -226,7 +226,7 @@ void decode_with_fse(int *type, size_t dataSeriesLength, unsigned int intervals,
     int nbits;
     size_t diff;
     for (int i=dataSeriesLength-1; i>=0; i--) {
-        if (tp_code[i] == 67) {
+        if (tp_code[i] == TOTAL_CODE_NUM) {
             type[i] = 0;
             continue;
         }
@@ -238,7 +238,7 @@ void decode_with_fse(int *type, size_t dataSeriesLength, unsigned int intervals,
             diff =0;
         BIT_reloadDStream(&transCodeStream);
         
-        if (tp_code[i] < 34) {
+        if (tp_code[i] < POSITIVE_CODE_NUM) {
             // 正数
             type[i] = code2type[tp_code[i]] + diff;
         }

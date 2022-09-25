@@ -165,6 +165,7 @@ typedef struct sz_params
 {
 	int dataType;
 	int entropy_type; // 0 (huffman), or 1 (zstd), or 2(fse)
+	int prediction;
 	unsigned int max_quant_intervals; //max number of quantization intervals for quantization
 	unsigned int quantization_intervals;
 	unsigned int maxRangeRadius;

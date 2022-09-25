@@ -309,8 +309,6 @@ int new_TightDataPointStorageF_fromFlatBytes(TightDataPointStorageF **this, unsi
 	return errorBoundMode;
 }
 
-struct timeval startTime;
-struct timeval endTime;  /* Start and end times */
 struct timeval Start; /*only used for recording the cost*/
 double huffCost = 0;
 
@@ -371,7 +369,30 @@ void new_TightDataPointStorageF(TightDataPointStorageF **this,
 	int stateNum = 2*intervals;
 	printf("intervals=%u\n", intervals);
 
+	// prediction
+	unsigned int Distance = 10;  	// 采样间隔
+	int *type2 = (int *)malloc(dataSeriesLength / Distance * sizeof(int) * 2); 
+	int totalSampleSize = 0;
+
+	for(int j=Distance; j<dataSeriesLength; j+=Distance) {
+		type2[totalSampleSize++] = type[j];
+	}
+
 	if ((*this)->entropyType == 0) {
+		// prediction
+		// huff_cost_start();
+		// size_t sample_huf_size;
+		// unsigned char *sample_hufcode;
+		// HuffmanTree* huffmanTree2 = createHuffmanTree(stateNum);
+		// if(confparams_cpr->errorBoundMode == PW_REL && confparams_cpr->accelerate_pw_rel_compression)
+		// 	(*this)->max_bits = encode_withTree_MSST19(huffmanTree2, type2, totalSampleSize, &sample_hufcode, &sample_huf_size);
+		// else
+		// 	encode_withTree(huffmanTree2, type2, totalSampleSize, &sample_hufcode, &sample_huf_size);
+		// SZ_ReleaseHuffman(huffmanTree2);
+
+		// huff_cost_end();
+		// printf("[huffman-predict]: \tratio=%f, outsize=%lu, time=%f\n",(totalSampleSize*4.0) / (sample_huf_size-8), sample_huf_size, huffCost);
+
 		// huffman
 		huff_cost_start();
 		HuffmanTree* huffmanTree = createHuffmanTree(stateNum);
@@ -382,8 +403,8 @@ void new_TightDataPointStorageF(TightDataPointStorageF **this,
 		SZ_ReleaseHuffman(huffmanTree);
 
 		huff_cost_end();
+		// printf("[huffman]: \tratio=%f, outsize=%lu, time=%f\n", (dataSeriesLength*4.0) / ((*this)->typeArray_size-8), (*this)->typeArray_size, huffCost);
 		printf("[huffman]: \toutsize=%lu, time=%f\n", (*this)->typeArray_size, huffCost);
-		// printf("huff: time=%f\n", huffCost);
 	} 
 	else if ((*this)->entropyType == 1) {
 		// zstd
@@ -392,7 +413,7 @@ void new_TightDataPointStorageF(TightDataPointStorageF **this,
 		for (int i = 0; i < dataSeriesLength; i++) {
 			temp[i] = (unsigned short)type[i];
 		}
-		// FILE *fp = fopen("/home/lxzhong/tmp/type_array.bin", "wb");
+		// FILE *fp = fopen("/home/zhongyu/tmp/type_array.bin", "wb");
 		// fwrite((void *)temp, sizeof(unsigned short), dataSeriesLength, fp);
 		// fclose(fp);
 
@@ -405,13 +426,31 @@ void new_TightDataPointStorageF(TightDataPointStorageF **this,
 		free(temp);
 	}
 	else {
+		size_t csize;
+
+		// prediction
+		huff_cost_start();
+		size_t sample_fse_size, sample_transcode_size;
+		unsigned char *sample_fsecode, *sample_transcode;
+		encode_with_fse(type2, totalSampleSize, intervals, &sample_fsecode, &sample_fse_size, 
+					&sample_transcode, &sample_transcode_size);
+		huff_cost_end();
+
+		csize = sample_fse_size+sample_transcode_size+4+4;
+		printf("[fse-predict]: \tratio=%f, outsize=%lu, time=%f\n", (totalSampleSize*4.0) / (csize-8), csize, huffCost);
+		free(sample_fsecode);
+		free(sample_transcode);
+		free(type2);
+
 		// fse
 		huff_cost_start();
 		encode_with_fse(type, dataSeriesLength, intervals, &((*this)->FseCode), &((*this)->FseCode_size), 
 					&((*this)->transCodeBits), &((*this)->transCodeBits_size));
 		huff_cost_end();
-		printf("[fse]: \t\toutsize=%lu, time=%f\n", (*this)->FseCode_size+(*this)->transCodeBits_size+4+4, huffCost);
-		// printf("fse: time=%f\n", huffCost);
+		csize = (*this)->FseCode_size+(*this)->transCodeBits_size+4+4;
+		printf("[fse]: \t\tratio=%f, outsize=%lu, time=%f\n", (dataSeriesLength*4.0) / (csize-8), csize, huffCost);
+		// printf("[fse]: \t\toutsize=%lu, time=%f\n", csize, huffCost);
+		
 
 		// int* type2 = (int*)malloc(dataSeriesLength*sizeof(int));
 		// decode_with_fse((*this), dataSeriesLength, type2);
@@ -450,6 +489,7 @@ void new_TightDataPointStorageF2(TightDataPointStorageF **this,
 		unsigned char* pwrErrBoundBytes, size_t pwrErrBoundBytes_size, unsigned char radExpo) {
 	//int i = 0;
 	*this = (TightDataPointStorageF *)malloc(sizeof(TightDataPointStorageF));
+	(*this)->entropyType = confparams_cpr->entropy_type;
 	(*this)->allSameData = 0;
 	(*this)->realPrecision = realPrecision;
 	(*this)->medianValue = medianValue;
@@ -489,7 +529,7 @@ void new_TightDataPointStorageF2(TightDataPointStorageF **this,
 		for (int i = 0; i < dataSeriesLength; i++) {
 			temp[i] = (unsigned short)type[i];
 		}
-		// FILE *fp = fopen("/home/lxzhong/tmp/type_array.bin", "wb");
+		// FILE *fp = fopen("/home/zhongyu/tmp/type_array.bin", "wb");
 		// fwrite((void *)temp, sizeof(unsigned short), dataSeriesLength, fp);
 		// fclose(fp);
 

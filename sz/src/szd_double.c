@@ -73,7 +73,7 @@ size_t cmpSize, int compressionType, double* hist_data)
 	int doubleSize = sizeof(double);
 	if(tdps->isLossless)
 	{
-		printf("origin data\n");
+		// printf("origin data\n");
 		*newData = (double*)malloc(doubleSize*dataLength);
 		if(sysEndianType==BIG_ENDIAN_SYSTEM)
 		{
@@ -3452,6 +3452,10 @@ void decompressDataSeries_double_3D_nonblocked_with_blocked_regression(double** 
 	SZ_COMPUTE_BLOCKCOUNT(r2, num_y, split_index_y, early_blockcount_y, late_blockcount_y);
 	SZ_COMPUTE_BLOCKCOUNT(r3, num_z, split_index_z, early_blockcount_z, late_blockcount_z);
 
+	// huffman
+	HuffmanTree* huffmanTree = NULL;
+	node root = NULL;
+
 	size_t num_blocks = num_x * num_y * num_z;
 
 	double realPrecision = bytesToDouble(comp_data_pos);
@@ -3461,16 +3465,21 @@ void decompressDataSeries_double_3D_nonblocked_with_blocked_regression(double** 
 
 	//updateQuantizationInfo(intervals);
 
-	unsigned int tree_size = bytesToInt_bigEndian(comp_data_pos);
+	unsigned int entropyType = bytesToInt_bigEndian(comp_data_pos);
 	comp_data_pos += sizeof(int);
+	confparams_dec->entropy_type = entropyType;
+	if (entropyType == 0) {
+		// huffman
+		unsigned int tree_size = bytesToInt_bigEndian(comp_data_pos);
+		comp_data_pos += sizeof(int);
 	
-	int stateNum = 2*intervals;
-	HuffmanTree* huffmanTree = createHuffmanTree(stateNum);	
+		int stateNum = 2*intervals;
+		huffmanTree = createHuffmanTree(stateNum);	
 	
-	int nodeCount = bytesToInt_bigEndian(comp_data_pos);
-	node root = reconstruct_HuffTree_from_bytes_anyStates(huffmanTree,comp_data_pos+4, nodeCount);
-	comp_data_pos += sizeof(int) + tree_size;
-
+		int nodeCount = bytesToInt_bigEndian(comp_data_pos);
+		root = reconstruct_HuffTree_from_bytes_anyStates(huffmanTree,comp_data_pos+4, nodeCount);
+		comp_data_pos += sizeof(int) + tree_size;
+	}
 	double mean;
 	unsigned char use_mean;
 	memcpy(&use_mean, comp_data_pos, sizeof(unsigned char));
@@ -3529,9 +3538,35 @@ void decompressDataSeries_double_3D_nonblocked_with_blocked_regression(double** 
 	comp_data_pos += total_unpred * sizeof(double);
 
 	int * result_type = (int *) malloc(num_elements * sizeof(int));
-	decode(comp_data_pos, num_elements, root, result_type);
-	SZ_ReleaseHuffman(huffmanTree);
 	
+	if (entropyType == 0) {
+		// huffman
+		decode(comp_data_pos, num_elements, root, result_type);
+		SZ_ReleaseHuffman(huffmanTree);
+	}
+	else if (entropyType == 1) {
+		// zstd
+		unsigned int typeArray_size = bytesToInt_bigEndian(comp_data_pos);
+		comp_data_pos += sizeof(int);
+		short* type__ = (short*)malloc(num_elements*sizeof(short));
+		int tmpSize = sz_lossless_decompress(ZSTD_COMPRESSOR, comp_data_pos, typeArray_size, (unsigned char **)&type__, num_elements*sizeof(short));
+		if (tmpSize != num_elements*sizeof(short)){
+			printf("tmpSize(%d) != dataSeriesLength*sizeof(short)(%lu)",tmpSize,num_elements*sizeof(short));
+		}
+		for (int i=0; i<num_elements; i++)
+			result_type[i] = (int)type__[i];
+		free(type__);
+	}
+	else {
+		// fse
+		unsigned int FseCode_size = bytesToInt_bigEndian(comp_data_pos);
+		comp_data_pos += sizeof(int);
+		unsigned int transCodeBits_size = bytesToInt_bigEndian(comp_data_pos);
+		comp_data_pos += sizeof(int);
+		decode_with_fse(result_type, num_elements, intervals, comp_data_pos, FseCode_size, 
+					comp_data_pos+FseCode_size, transCodeBits_size);
+	}
+
 	int intvRadius = intervals/2;
 	
 	int * type;

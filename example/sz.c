@@ -39,7 +39,8 @@ void usage()
 	printf("	-p: print meta data (configuration info)\n");
 	printf("	-h: print the help information\n");
 	printf("	-v: print the version number\n");	
-	printf("	-e: <n>: choose strategy to compress quantification factor. '0' for huffman (default), '1' for zstd and '2' for fse.\n");
+	printf("	-g: <n>: choose strategy to compress quantification factor. '0' for huffman (default), '1' for zstd and '2' for fse.\n");
+	printf("	-e: give a expected compression ratio of current file quickly and do not compress the entire file.\n");
 	printf("* data type:\n");
 	printf("	-f: single precision (float type)\n");
 	printf("	-d: double precision (double type)\n");
@@ -100,6 +101,7 @@ int main(int argc, char* argv[])
 	int dataType = 0; //0: single precision ; 1: double precision
 	int tucker = 0; //0: without tucker tensor decomposition preprocessing; 1: with tucker tensor decomposition
 	int entropyType = 0;
+	int prediction_ = 0;
 	char* inPath = NULL;
 	char* cmpPath = NULL;
 	char* conPath = NULL;
@@ -150,11 +152,14 @@ int main(int argc, char* argv[])
 			printStats = 1;
 			break;
 #endif			
-		case 'e':
+		case 'g':
 			if (++i == argc || sscanf(argv[i], "%u", &entropyType) != 1) {
 				usage();
 				exit(0);
 			}
+			break;
+		case 'e':
+			prediction_ = 1;
 			break;
 		case 'z':
 			isCompression = 1;
@@ -331,6 +336,7 @@ int main(int argc, char* argv[])
 	if(isCompression == 1)
 	{
 		confparams_cpr->entropy_type = entropyType;
+		confparams_cpr->prediction = prediction_;
 		if(absErrorBound != NULL)
 			confparams_cpr->absErrBound = atof(absErrorBound);
 		

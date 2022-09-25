@@ -34,6 +34,9 @@
 #include "MultiLevelCacheTableWideInterval.h"
 #include "sz_stats.h"
 #include <sys/time.h>
+#include "transcode.h"
+
+#define DISTANCE 1
 
 
 struct timeval Start5; /*only used for recording the cost*/
@@ -371,6 +374,119 @@ unsigned int optimize_intervals_float_4D(float *oriData, size_t r1, size_t r2, s
 	return powerOf2;
 }
 
+// ABS 1D
+float predict_compressRatio_float_1D_opt(float *oriData, size_t dataLength, double realPrecision, unsigned int quantization_intervals, float valueRangeSize, float medianValue_f)
+{
+	printf("===Starting predicting: ABS 1D===\n");
+	size_t radiusIndex;
+	float pred_value = 0, pred_err;				
+	unsigned int Distance = DISTANCE;  	// 采样间隔
+	int *type = (int *)malloc(dataLength / Distance * sizeof(int) * 2); 
+	size_t totalSampleSize = 0;//dataLength/confparams_cpr->sampleDistance;
+
+	// definitions of unpredictable data
+	size_t exactNum = 0;
+	int reqLength;
+	float medianValue = medianValue_f;
+	short radExpo = getExponent_float(valueRangeSize/2);
+
+	computeReqLength_float(realPrecision, radExpo, &reqLength, &medianValue);
+
+	DynamicIntArray *exactLeadNumArray;
+	new_DIA(&exactLeadNumArray, DynArrayInitLen);
+
+	DynamicByteArray *exactMidByteArray;
+	new_DBA(&exactMidByteArray, DynArrayInitLen);
+
+	DynamicIntArray *resiBitArray;
+	new_DIA(&resiBitArray, DynArrayInitLen);
+	
+	unsigned char preDataBytes[4];
+	intToBytes_bigEndian(preDataBytes, 0);
+
+	int reqBytesLength = reqLength/8;
+	int resiBitsLength = reqLength%8;
+
+	FloatValueCompressElement *vce = (FloatValueCompressElement*)malloc(sizeof(FloatValueCompressElement));
+	LossyCompressionElement *lce = (LossyCompressionElement*)malloc(sizeof(LossyCompressionElement));
+
+
+	int intvRadius = quantization_intervals/2;
+	float * data_pos = oriData + Distance;
+	while(data_pos - oriData < dataLength){
+		pred_value = data_pos[-1];
+		pred_err = fabs(pred_value - *data_pos);
+		radiusIndex = (int)((pred_err/realPrecision+1))>>1;
+
+		if(radiusIndex >= intvRadius) {
+			exactNum++;
+			type[totalSampleSize++] = 0;
+			
+			compressSingleFloatValue(vce, *data_pos, realPrecision, medianValue, reqLength, reqBytesLength, resiBitsLength);
+			updateLossyCompElement_Float(vce->curBytes, preDataBytes, reqBytesLength, resiBitsLength, lce);
+			memcpy(preDataBytes,vce->curBytes,4);
+			addExactData(exactMidByteArray, exactLeadNumArray, resiBitArray, lce);
+
+		}
+		else if(*data_pos>=pred_value)
+		{
+			type[totalSampleSize++] = intvRadius+radiusIndex;
+		}
+		else //curData<pred
+		{
+			type[totalSampleSize++] = intvRadius-radiusIndex;
+		}
+
+
+		data_pos += Distance;
+	}
+	
+	size_t exactDataNum = exactLeadNumArray->size;
+	TightDataPointStorageF* tdps;
+
+	new_TightDataPointStorageF(&tdps, totalSampleSize, exactDataNum,
+			type, exactMidByteArray->array, exactMidByteArray->size,
+			exactLeadNumArray->array,
+			resiBitArray->array, resiBitArray->size,
+			resiBitsLength,
+			realPrecision, medianValue, (char)reqLength, quantization_intervals, NULL, 0, 0);
+	
+	unsigned char *tmpCompBytes;
+	size_t tmpOutSize;
+	convertTDPStoFlatBytes_float(tdps, &tmpCompBytes, &tmpOutSize);
+	unsigned char* compressedBytes;
+	size_t outSize = sz_lossless_compress(confparams_cpr->losslessCompressor, confparams_cpr->gzipMode, tmpCompBytes, tmpOutSize, &compressedBytes);
+    free(tmpCompBytes);
+	free(compressedBytes);
+	free_TightDataPointStorageF(tdps);
+
+	// size_t sample_fse_size, sample_transcode_size;
+	// unsigned char *sample_fsecode, *sample_transcode;
+
+	// printf("1\n");
+	// encode_with_fse(type, totalSampleSize, quantization_intervals, &sample_fsecode, &sample_fse_size, 
+	// 				&sample_transcode, &sample_transcode_size);
+	// printf("2\n");
+	
+	free_DIA(exactLeadNumArray);
+	free_DIA(resiBitArray);
+	free(vce);
+	free(lce);
+	// free(sample_fsecode);
+	// free(sample_transcode);
+	free(type);
+	free(exactMidByteArray); 
+	
+	float expected_ratio = (totalSampleSize*4.0) / outSize;
+	printf("[predicting stats]: DataLength=%lu, SampleLength=%lu, exactNum=%lu, tmpOutSize=%lu, outSize=%lu\n", dataLength, totalSampleSize, exactNum, tmpOutSize, outSize);
+	printf("===Finishing predicting: ABS 1D===\n");
+	return expected_ratio;
+	// printf("[predicting]: totalSampleSize=%lu, exactNum=%lu, sample_fse_size=%lu, sample_transcode_size=%lu\n", totalSampleSize, exactNum, sample_fse_size, sample_transcode_size);
+	// return (totalSampleSize*4.0) / (sample_fse_size + sample_transcode_size);
+}
+
+
+// ABS 1D
 TightDataPointStorageF* SZ_compress_float_1D_MDQ(float *oriData,
 size_t dataLength, float realPrecision, float valueRangeSize, float medianValue_f)
 {
@@ -386,6 +502,14 @@ size_t dataLength, float realPrecision, float valueRangeSize, float medianValue_
 	else
 		quantization_intervals = exe_params->intvCapacity;
 	//updateQuantizationInfo(quantization_intervals);
+
+	if (confparams_cpr->prediction) {
+		huff_cost_start5();
+		float predict_ratio = predict_compressRatio_float_1D_opt(oriData, dataLength, realPrecision, quantization_intervals, valueRangeSize, medianValue_f);
+		huff_cost_end5();
+		printf("[prediction]: expecting compression ratio=%f. (cost time:%f s)\n", predict_ratio, huffCost5);
+		// exit(0);
+	}
 	int intvRadius = quantization_intervals/2;
 
 	size_t i;
@@ -619,7 +743,6 @@ size_t dataLength, double realPrecision, size_t *outSize, float valueRangeSize, 
 #endif
 		tdps = SZ_compress_float_1D_MDQ(oriData, dataLength, realPrecision, valueRangeSize, medianValue_f);
 
-	printf("islossless=%d\n", tdps->isLossless);
 	convertTDPStoFlatBytes_float(tdps, newByteData, outSize);
 
 	if(*outSize>3 + MetaDataByteLength + exe_params->SZ_SIZE_TYPE + 1 + sizeof(float)*dataLength)
@@ -1836,7 +1959,123 @@ char SZ_compress_args_float_NoCkRngeNoGzip_4D(unsigned char** newByteData, float
 	return 0;
 }
 
+// PW_REL 1D
+float predict_compressRatio_float_1D_opt_MSST19(float *oriData, size_t dataLength, double realPrecision, unsigned int quantization_intervals, float valueRangeSize, float medianValue_f)
+{
+	printf("===Starting predicting: PW_REL 1D===\n");
+	size_t radiusIndex;
+	float pred_value = 0;
+	double pred_err;				
+	unsigned int Distance = DISTANCE;  	// 采样间隔
+	int *type = (int *)malloc(dataLength / Distance * sizeof(int) * 2); 
+	size_t totalSampleSize = 0;//dataLength/confparams_cpr->sampleDistance;
+
+	// definitions of unpredictable data
+	size_t exactNum = 0;
+	int intvRadius = quantization_intervals/2;
+	int reqLength;
+	float medianValue = medianValue_f;
+	reqLength = computeReqLength_float_MSST19(realPrecision);
+	DynamicIntArray *exactLeadNumArray;
+	new_DIA(&exactLeadNumArray, dataLength/2/8);
+
+	DynamicByteArray *exactMidByteArray;
+	new_DBA(&exactMidByteArray, dataLength/2);
+
+	DynamicIntArray *resiBitArray;
+	new_DIA(&resiBitArray, DynArrayInitLen);
+
+	unsigned char preDataBytes[4];
+	intToBytes_bigEndian(preDataBytes, 0);
+
+	int reqBytesLength = reqLength/8;
+	int resiBitsLength = reqLength%8;
+
+	FloatValueCompressElement *vce = (FloatValueCompressElement*)malloc(sizeof(FloatValueCompressElement));
+	LossyCompressionElement *lce = (LossyCompressionElement*)malloc(sizeof(LossyCompressionElement));
+
+
+	
+	float *data_pos = oriData + Distance;
+	float divider = log2(1+realPrecision)*2;
+	int tempIndex = 0;
+	while(data_pos - oriData < dataLength){
+		if(*data_pos == 0){
+    		data_pos += Distance;
+            continue;
+		}
+	    tempIndex++;
+		pred_value = data_pos[-1];
+		pred_err = fabs((double)*data_pos / pred_value);
+		radiusIndex = (unsigned long)fabs(log2(pred_err)/divider+0.5);
+		
+		if(radiusIndex >= intvRadius) {
+			exactNum++;
+			type[totalSampleSize++] = 0;
+			
+			compressSingleFloatValue_MSST19(vce, *data_pos, realPrecision, reqLength, reqBytesLength, resiBitsLength);
+			updateLossyCompElement_Float(vce->curBytes, preDataBytes, reqBytesLength, resiBitsLength, lce);
+			memcpy(preDataBytes,vce->curBytes,4);
+			addExactData(exactMidByteArray, exactLeadNumArray, resiBitArray, lce);
+		
+		}
+		else if(*data_pos>=pred_value)
+		{
+			type[totalSampleSize++] = intvRadius+radiusIndex;
+		}
+		else //curData<pred
+		{
+			type[totalSampleSize++] = intvRadius-radiusIndex;
+		}
+
+		data_pos += Distance;
+	}
+
+	size_t exactDataNum = exactLeadNumArray->size;
+
+	TightDataPointStorageF* tdps;
+
+	new_TightDataPointStorageF(&tdps, totalSampleSize, exactDataNum,
+			type, exactMidByteArray->array, exactMidByteArray->size,
+			exactLeadNumArray->array,
+			resiBitArray->array, resiBitArray->size,
+			resiBitsLength,
+			realPrecision, medianValue, (char)reqLength, quantization_intervals, NULL, 0, 0);
+
+	unsigned char *tmpCompBytes;
+	size_t tmpOutSize;
+	convertTDPStoFlatBytes_float(tdps, &tmpCompBytes, &tmpOutSize);
+	unsigned char* compressedBytes;
+	size_t outSize = sz_lossless_compress(confparams_cpr->losslessCompressor, confparams_cpr->gzipMode, tmpCompBytes, tmpOutSize, &compressedBytes);
+    free(tmpCompBytes);
+	free(compressedBytes);
+	free_TightDataPointStorageF(tdps);
+
+	// size_t sample_fse_size, sample_transcode_size;
+	// unsigned char *sample_fsecode, *sample_transcode;
+
+	// printf("1\n");
+	// encode_with_fse(type, totalSampleSize, quantization_intervals, &sample_fsecode, &sample_fse_size, 
+	// 				&sample_transcode, &sample_transcode_size);
+	// printf("2\n");
+	
+	free_DIA(exactLeadNumArray);
+	free_DIA(resiBitArray);
+	free(vce);
+	free(lce);
+	// free(sample_fsecode);
+	// free(sample_transcode);
+	free(type);
+	free(exactMidByteArray); 
+	
+	float expected_ratio = (totalSampleSize*4.0) / outSize;
+	printf("[predicting stats]: DataLength=%lu, SampleLength=%lu, exactNum=%lu, tmpOutSize=%lu, outSize=%lu\n", dataLength, totalSampleSize, exactNum, tmpOutSize, outSize);
+	printf("===Finishing predicting: PW_REL 1D===\n");
+	return expected_ratio;
+}
+
 /*MSST19*/
+// PW_REL 1D
 TightDataPointStorageF* SZ_compress_float_1D_MDQ_MSST19(float *oriData,
 size_t dataLength, double realPrecision, float valueRangeSize, float medianValue_f)
 {
@@ -1854,6 +2093,12 @@ size_t dataLength, double realPrecision, float valueRangeSize, float medianValue
 	else
 		quantization_intervals = exe_params->intvCapacity;
 	//updateQuantizationInfo(quantization_intervals);
+	if (confparams_cpr->prediction) {
+		huff_cost_start5();
+		float predict_ratio = predict_compressRatio_float_1D_opt_MSST19(oriData, dataLength, realPrecision, quantization_intervals, valueRangeSize, medianValue_f);
+		huff_cost_end5();
+		printf("[prediction]: expecting compression ratio=%f. (cost time:%f s)\n", predict_ratio, huffCost5);
+	}
 	int intvRadius = quantization_intervals/2;
 
 	double* precisionTable = (double*)malloc(sizeof(double) * quantization_intervals);
@@ -1964,7 +2209,6 @@ size_t dataLength, double realPrecision, float valueRangeSize, float medianValue
 			//hit++;
 			continue;
 		}
-
 		//unpredictable data processing
 		type[i] = 0;
 		compressSingleFloatValue_MSST19(vce, curData, realPrecision, reqLength, reqBytesLength, resiBitsLength);
@@ -2006,6 +2250,119 @@ size_t dataLength, double realPrecision, float valueRangeSize, float medianValue
 	return tdps;
 }
 
+// PW_REL 2D
+float predict_compressRatio_float_2D_opt_MSST19(float *oriData, size_t r1, size_t r2, double realPrecision, unsigned int quantization_intervals, float valueRangeSize, float medianValue_f)
+{
+	printf("===Starting predicting: PW_REL 2D===\n");
+	size_t radiusIndex;
+	size_t dataLength = r1 * r2;
+	float pred_value = 0, pred_err;
+	unsigned int Distance = DISTANCE;  													// 采样间隔
+	int *type = (int *)malloc(dataLength / Distance * sizeof(int) * 2); 				// 采样得到的量化因子
+	size_t totalSampleSize = 0;
+
+// definitions of unpredictable data
+	size_t exactNum = 0;
+	int intvRadius = quantization_intervals/2;
+	int reqLength;
+	float medianValue = medianValue_f;
+	reqLength = computeReqLength_double_MSST19(realPrecision);
+	DynamicIntArray *exactLeadNumArray;
+	new_DIA(&exactLeadNumArray, dataLength/2/8);
+
+	DynamicByteArray *exactMidByteArray;
+	new_DBA(&exactMidByteArray, dataLength/2);
+
+	DynamicIntArray *resiBitArray;
+	new_DIA(&resiBitArray, DynArrayInitLen);
+
+	unsigned char preDataBytes[4];
+	intToBytes_bigEndian(preDataBytes, 0);
+
+	int reqBytesLength = reqLength/8;
+	int resiBitsLength = reqLength%8;
+
+	FloatValueCompressElement *vce = (FloatValueCompressElement*)malloc(sizeof(FloatValueCompressElement));
+	LossyCompressionElement *lce = (LossyCompressionElement*)malloc(sizeof(LossyCompressionElement));
+
+	size_t offset_count = Distance - 1; // count r2 offset
+	size_t offset_count_2;
+	float * data_pos = oriData + r2 + offset_count;
+	float divider = log2(1+realPrecision)*2;
+	size_t n1_count = 1; // count i sum
+	size_t len = r1 * r2;
+	while(data_pos - oriData < len){
+		if(*data_pos == 0){
+        	data_pos += Distance;
+        	continue;
+		}
+		pred_value = data_pos[-1] + data_pos[-r2] - data_pos[-r2-1];
+		pred_err = fabs(pred_value / *data_pos);
+		radiusIndex = (unsigned long)fabs(log2(pred_err)/divider+0.5);
+		if(radiusIndex >= intvRadius) {
+			exactNum++;
+			type[totalSampleSize++] = 0;
+			
+			compressSingleFloatValue_MSST19(vce, *data_pos, realPrecision, reqLength, reqBytesLength, resiBitsLength);
+			updateLossyCompElement_Float(vce->curBytes, preDataBytes, reqBytesLength, resiBitsLength, lce);
+			memcpy(preDataBytes,vce->curBytes,4);
+			addExactData(exactMidByteArray, exactLeadNumArray, resiBitArray, lce);
+		
+		}
+		else if(*data_pos>=pred_value)
+		{
+			type[totalSampleSize++] = intvRadius+radiusIndex;
+		}
+		else //curData<pred
+		{
+			type[totalSampleSize++] = intvRadius-radiusIndex;
+		}
+
+		offset_count += Distance;
+		if(offset_count >= r2){
+			n1_count ++;
+			offset_count_2 = n1_count % Distance;
+			data_pos += (r2 + Distance - offset_count) + (Distance - offset_count_2);
+			offset_count = (Distance - offset_count_2);
+			if(offset_count == 0) offset_count ++;
+		}
+		else data_pos += Distance;
+	}
+
+
+	size_t exactDataNum = exactLeadNumArray->size;
+
+	TightDataPointStorageF* tdps;
+
+	new_TightDataPointStorageF(&tdps, totalSampleSize, exactDataNum,
+			type, exactMidByteArray->array, exactMidByteArray->size,
+			exactLeadNumArray->array,
+			resiBitArray->array, resiBitArray->size,
+			resiBitsLength,
+			realPrecision, medianValue, (char)reqLength, quantization_intervals, NULL, 0, 0);
+
+	unsigned char *tmpCompBytes;
+	size_t tmpOutSize;
+	convertTDPStoFlatBytes_float(tdps, &tmpCompBytes, &tmpOutSize);
+	unsigned char* compressedBytes;
+	size_t outSize = sz_lossless_compress(confparams_cpr->losslessCompressor, confparams_cpr->gzipMode, tmpCompBytes, tmpOutSize, &compressedBytes);
+    
+	free(tmpCompBytes);
+	free(compressedBytes);
+	free_TightDataPointStorageF(tdps);
+	free_DIA(exactLeadNumArray);
+	free_DIA(resiBitArray);
+	free(vce);
+	free(lce);
+	free(type);
+	free(exactMidByteArray); 
+	
+	float expected_ratio = (totalSampleSize*4.0) / outSize;
+	printf("[predicting stats]: DataLength=%lu, SampleLength=%lu, exactNum=%lu, tmpOutSize=%lu, outSize=%lu\n", dataLength, totalSampleSize, exactNum, tmpOutSize, outSize);
+	printf("===Finishing predicting: PW_REL 2D===\n");
+	return expected_ratio;
+}
+
 TightDataPointStorageF* SZ_compress_float_2D_MDQ_MSST19(float *oriData, size_t r1, size_t r2, double realPrecision, float valueRangeSize, float medianValue_f)
 {
 #ifdef HAVE_TIMECMPR
@@ -2019,10 +2376,18 @@ TightDataPointStorageF* SZ_compress_float_2D_MDQ_MSST19(float *oriData, size_t r
 	{
 		quantization_intervals = optimize_intervals_float_2D_opt_MSST19(oriData, r1, r2, realPrecision);
 		updateQuantizationInfo(quantization_intervals);
+		// printf("[prediction]: ratio=%f\n", predict_compressRatio_float_2D_opt_MSST19(oriData, r1, r2, realPrecision, quantization_intervals));
 	}
 	else
 		quantization_intervals = exe_params->intvCapacity;
 	int intvRadius = quantization_intervals/2;
+
+	if (confparams_cpr->prediction) {
+		huff_cost_start5();
+		float predict_ratio = predict_compressRatio_float_2D_opt_MSST19(oriData, r1, r2, realPrecision, quantization_intervals, valueRangeSize, medianValue_f);
+		huff_cost_end5();
+		printf("[prediction]: expecting compression ratio=%f. (cost time:%f s)\n", predict_ratio, huffCost5);
+	}
 
 	double* precisionTable = (double*)malloc(sizeof(double) * quantization_intervals);
 	double inv = 2.0-pow(2, -(confparams_cpr->plus_bits));
@@ -3039,9 +3404,9 @@ int errBoundMode, double absErr_Bound, double relBoundRatio, double pwRelBoundRa
 		}
 		else if(confparams_cpr->szMode==SZ_BEST_COMPRESSION || confparams_cpr->szMode==SZ_DEFAULT_COMPRESSION || confparams_cpr->szMode==SZ_TEMPORAL_COMPRESSION)
 		{
-			// huff_cost_start5();
+			huff_cost_start5();
 			*outSize = sz_lossless_compress(confparams_cpr->losslessCompressor, confparams_cpr->gzipMode, tmpByteData, tmpOutSize, newByteData);
-    		// huff_cost_end5();
+    		huff_cost_end5();
     		// printf("[zstd_]: time=%f\n", huffCost5);
 			free(tmpByteData);
 		}
@@ -5524,7 +5889,154 @@ unsigned int optimize_intervals_float_2D_with_freq_and_dense_pos(float *oriData,
 	return powerOf2;
 }
 
-// 2D:  modified for higher performance
+// ABS 2D
+float predict_compressRatio_float_2D_with_freq_and_dense_pos(float *oriData, size_t r1, size_t r2, double realPrecision, unsigned int quantization_intervals)
+{
+	printf("===Starting predicting: ABS 2D===\n");
+	float mean = 0.0;
+	size_t dataLength = r1 * r2;
+	size_t mean_distance = (int) (sqrt(dataLength));
+
+	float * data_pos = oriData;
+	size_t mean_count = 0;
+	while(data_pos - oriData < dataLength){
+		mean += *data_pos;
+		mean_count ++;
+		data_pos += mean_distance;
+	}
+	if(mean_count > 0) mean /= mean_count;
+	size_t range = 8192;
+	size_t radius = 4096;
+	size_t * freq_intervals = (size_t *) malloc(range*sizeof(size_t));
+	memset(freq_intervals, 0, range*sizeof(size_t));
+
+	int sampleDistance = DISTANCE;
+
+	size_t radiusIndex;
+	float pred_value = 0, pred_err;
+	int *type = (int *)malloc(dataLength / sampleDistance * sizeof(int) * 2); 
+	int intvRadius = quantization_intervals/2;
+
+	// definitions of unpredictable data
+	size_t exactNum = 0;
+	int reqLength;
+	float valueRangeSize = 0, medianValue = 0;
+	computeRangeSize_float(oriData, dataLength, &valueRangeSize, &medianValue);
+	short radExpo = getExponent_float(valueRangeSize/2);
+
+	computeReqLength_float(realPrecision, radExpo, &reqLength, &medianValue);
+
+	DynamicIntArray *exactLeadNumArray;
+	new_DIA(&exactLeadNumArray, DynArrayInitLen);
+
+	DynamicByteArray *exactMidByteArray;
+	new_DBA(&exactMidByteArray, DynArrayInitLen);
+
+	DynamicIntArray *resiBitArray;
+	new_DIA(&resiBitArray, DynArrayInitLen);
+	
+	unsigned char preDataBytes[4];
+	intToBytes_bigEndian(preDataBytes, 0);
+
+	int reqBytesLength = reqLength/8;
+	int resiBitsLength = reqLength%8;
+
+	FloatValueCompressElement *vce = (FloatValueCompressElement*)malloc(sizeof(FloatValueCompressElement));
+	LossyCompressionElement *lce = (LossyCompressionElement*)malloc(sizeof(LossyCompressionElement));
+
+
+	float mean_diff;
+	ptrdiff_t freq_index;
+	size_t freq_count = 0;
+	size_t n1_count = 1;
+	size_t offset_count = sampleDistance - 1;
+	size_t offset_count_2 = 0;
+	size_t sample_count = 0;
+	data_pos = oriData + r2 + offset_count;
+	while(data_pos - oriData < dataLength){
+		pred_value = data_pos[-1] + data_pos[-r2] - data_pos[-r2-1];
+		pred_err = fabs(pred_value - *data_pos);
+		if(pred_err < realPrecision) freq_count ++;
+		radiusIndex = (unsigned long)((pred_err/realPrecision+1)/2);
+		if(radiusIndex >= intvRadius) {
+			exactNum++;
+			type[sample_count++] = 0;
+
+			compressSingleFloatValue(vce, *data_pos, realPrecision, medianValue, reqLength, reqBytesLength, resiBitsLength);
+			updateLossyCompElement_Float(vce->curBytes, preDataBytes, reqBytesLength, resiBitsLength, lce);
+			memcpy(preDataBytes,vce->curBytes,4);
+			addExactData(exactMidByteArray, exactLeadNumArray, resiBitArray, lce);
+		}
+		else if(*data_pos>=pred_value)
+		{
+			type[sample_count++] = intvRadius+radiusIndex;
+		}
+		else //curData<pred
+		{
+			type[sample_count++] = intvRadius-radiusIndex;
+		}
+
+		mean_diff = *data_pos - mean;
+		if(mean_diff > 0) freq_index = (ptrdiff_t)(mean_diff/realPrecision) + radius;
+		else freq_index = (ptrdiff_t)(mean_diff/realPrecision) - 1 + radius;
+		if(freq_index <= 0){
+			freq_intervals[0] ++;
+		}
+		else if(freq_index >= range){
+			freq_intervals[range - 1] ++;
+		}
+		else{
+			freq_intervals[freq_index] ++;
+		}
+		offset_count += sampleDistance;
+		if(offset_count >= r2){
+			n1_count ++;
+			offset_count_2 = n1_count % sampleDistance;
+			data_pos += (r2 + sampleDistance - offset_count) + (sampleDistance - offset_count_2);
+			offset_count = (sampleDistance - offset_count_2);
+			if(offset_count == 0) offset_count ++;
+		}
+		else data_pos += sampleDistance;
+		// sample_count ++;
+	}
+
+	size_t exactDataNum = exactLeadNumArray->size;
+	TightDataPointStorageF* tdps;
+
+	new_TightDataPointStorageF(&tdps, sample_count, exactDataNum,
+			type, exactMidByteArray->array, exactMidByteArray->size,
+			exactLeadNumArray->array,
+			resiBitArray->array, resiBitArray->size,
+			resiBitsLength,
+			realPrecision, medianValue, (char)reqLength, quantization_intervals, NULL, 0, 0);
+	
+	unsigned char *tmpCompBytes;
+	size_t tmpOutSize;
+	convertTDPStoFlatBytes_float(tdps, &tmpCompBytes, &tmpOutSize);
+	unsigned char* compressedBytes;
+	size_t outSize = sz_lossless_compress(confparams_cpr->losslessCompressor, confparams_cpr->gzipMode, tmpCompBytes, tmpOutSize, &compressedBytes);
+    free(tmpCompBytes);
+	free(compressedBytes);
+	free_TightDataPointStorageF(tdps);
+
+	free(freq_intervals);
+	free_DIA(exactLeadNumArray);
+	free_DIA(resiBitArray);
+	free(vce);
+	free(lce);
+	// free(sample_fsecode);
+	// free(sample_transcode);
+	free(type);
+	free(exactMidByteArray); 
+
+	float expected_ratio = (sample_count * 4.0) / outSize;
+	printf("[predicting stats]: DataLength=%lu, SampleLength=%lu, exactNum=%lu, tmpOutSize=%lu, outSize=%lu\n", dataLength, sample_count, exactNum, tmpOutSize, outSize);
+	printf("===Finishing predicting: ABS 2D===\n");
+	return expected_ratio;
+}
+
+
+// ABS 2D:  modified for higher performance
 #define MIN(a, b) a<b? a : b
 unsigned char * SZ_compress_float_2D_MDQ_nonblocked_with_blocked_regression(float *oriData, size_t r1, size_t r2, float realPrecision, size_t * comp_size){
 
@@ -5543,6 +6055,13 @@ unsigned char * SZ_compress_float_2D_MDQ_nonblocked_with_blocked_regression(floa
 	}
 	else{
 		quantization_intervals = exe_params->intvCapacity;
+	}
+	if (confparams_cpr->prediction) {
+		huff_cost_start5();
+		float predict_ratio = predict_compressRatio_float_2D_with_freq_and_dense_pos(oriData, r1, r2, realPrecision, quantization_intervals);
+		huff_cost_end5();
+		printf("[prediction]: expecting compression ratio=%f. (cost time:%f s)\n", predict_ratio, huffCost5);
+		// exit(0);
 	}
 
 	// calculate block dims
@@ -6041,6 +6560,7 @@ unsigned char * SZ_compress_float_2D_MDQ_nonblocked_with_blocked_regression(floa
 				}
 				if(use_reg)
 				{
+					printf("use_reg\n");
 					{
 						/*predict coefficients in current block via previous reg_block*/
 						float cur_coeff;
@@ -6293,22 +6813,35 @@ unsigned char * SZ_compress_float_2D_MDQ_nonblocked_with_blocked_regression(floa
 	free(prediction_buffer_1);
 	free(prediction_buffer_2);
 
-	int stateNum = 2*quantization_intervals;
-	HuffmanTree* huffmanTree = createHuffmanTree(stateNum);
-
+	// huffman
+	unsigned char *treeBytes = NULL;
+	unsigned int treeByteSize = 0;
 	size_t nodeCount = 0;
-	size_t i = 0;
-	init(huffmanTree, result_type, num_elements);
-	for (i = 0; i < stateNum; i++)
-		if (huffmanTree->code[i]) nodeCount++;
-	nodeCount = nodeCount*2-1;
-
-	unsigned char *treeBytes;
-	unsigned int treeByteSize = convert_HuffTree_to_bytes_anyStates(huffmanTree, nodeCount, &treeBytes);
+	HuffmanTree* huffmanTree = NULL;
+	double hufftime1 = 0;
 
 	unsigned int meta_data_offset = 3 + 1 + MetaDataByteLength;
-	// total size 										metadata		  # elements   real precision		intervals	nodeCount		huffman 	 	block index 						unpredicatable count						mean 					 	unpred size 				elements
-	unsigned char * result = (unsigned char *) calloc(meta_data_offset + exe_params->SZ_SIZE_TYPE + sizeof(float) + sizeof(int) + sizeof(int) + 5*treeByteSize + 3*num_blocks*sizeof(int) + num_blocks * sizeof(unsigned short) + num_blocks * sizeof(unsigned short) + num_blocks * sizeof(float) + total_unpred * sizeof(float) + num_elements * sizeof(int), 1);
+
+	printf("intervals=%u\n", quantization_intervals);
+	if (confparams_cpr->entropy_type == 0) {
+		// huffman
+		huff_cost_start5();
+		int stateNum = 2*quantization_intervals;
+		huffmanTree = createHuffmanTree(stateNum);
+
+		size_t i = 0;
+		init(huffmanTree, result_type, num_elements);
+		for (i = 0; i < stateNum; i++)
+			if (huffmanTree->code[i]) nodeCount++;
+		nodeCount = nodeCount*2-1;
+
+		treeByteSize = convert_HuffTree_to_bytes_anyStates(huffmanTree, nodeCount, &treeBytes);
+		huff_cost_end5();
+		hufftime1 = huffCost5;
+	}
+	
+	// total size 										metadata		  # elements              real precision	intervals	 nodeCount		   huffman 	 	       block index 						                              unpredicatable count						mean 					 	unpred size 				elements
+	unsigned char * result = (unsigned char *) calloc(meta_data_offset + exe_params->SZ_SIZE_TYPE + sizeof(float) + sizeof(int) + sizeof(int) + 5*treeByteSize + 3*num_blocks*sizeof(int) + num_blocks * sizeof(unsigned short) + num_blocks * sizeof(unsigned short) + num_blocks * sizeof(float) + total_unpred * sizeof(float) + num_elements * sizeof(int), 1);	
 	unsigned char * result_pos = result;
 	initRandomAccessBytes(result_pos);
 	result_pos += meta_data_offset;
@@ -6322,13 +6855,19 @@ unsigned char * SZ_compress_float_2D_MDQ_nonblocked_with_blocked_regression(floa
 	result_pos += sizeof(float);
 	intToBytes_bigEndian(result_pos, quantization_intervals);
 	result_pos += sizeof(int);
-	intToBytes_bigEndian(result_pos, treeByteSize);
+	intToBytes_bigEndian(result_pos, confparams_cpr->entropy_type);
 	result_pos += sizeof(int);
-	intToBytes_bigEndian(result_pos, nodeCount);
-	result_pos += sizeof(int);
-	memcpy(result_pos, treeBytes, treeByteSize);
-	result_pos += treeByteSize;
-	free(treeBytes);
+
+	if (confparams_cpr->entropy_type == 0) {
+		// huffman
+		intToBytes_bigEndian(result_pos, treeByteSize);
+		result_pos += sizeof(int);
+		intToBytes_bigEndian(result_pos, nodeCount);
+		result_pos += sizeof(int);
+		memcpy(result_pos, treeBytes, treeByteSize);
+		result_pos += treeByteSize;
+		free(treeBytes);
+	}
 
 	memcpy(result_pos, &use_mean, sizeof(unsigned char));
 	result_pos += sizeof(unsigned char);
@@ -6341,36 +6880,39 @@ unsigned char * SZ_compress_float_2D_MDQ_nonblocked_with_blocked_regression(floa
 	//convert the lead/mid/resi to byte stream
 	if(reg_count>0){
 		for(int e=0; e<3; e++){
-			int stateNum = 2*coeff_intvCapacity_sz;
-			HuffmanTree* huffmanTree = createHuffmanTree(stateNum);
-			size_t nodeCount = 0;
-			init(huffmanTree, coeff_type[e], reg_count);
-			size_t i = 0;
-			for (i = 0; i < huffmanTree->stateNum; i++)
-				if (huffmanTree->code[i]) nodeCount++;
-			nodeCount = nodeCount*2-1;
-			unsigned char *treeBytes;
-			unsigned int treeByteSize = convert_HuffTree_to_bytes_anyStates(huffmanTree, nodeCount, &treeBytes);
+			// if (confparams_cpr->entropy_type == 0) {
+				int stateNum = 2*coeff_intvCapacity_sz;
+				HuffmanTree* huffmanTree = createHuffmanTree(stateNum);
+				size_t nodeCount = 0;
+				init(huffmanTree, coeff_type[e], reg_count);
+				size_t i = 0;
+				for (i = 0; i < huffmanTree->stateNum; i++)
+					if (huffmanTree->code[i]) nodeCount++;
+				nodeCount = nodeCount*2-1;
+				unsigned char *treeBytes;
+				unsigned int treeByteSize = convert_HuffTree_to_bytes_anyStates(huffmanTree, nodeCount, &treeBytes);
 			floatToBytes(result_pos, precision[e]);
 			result_pos += sizeof(float);
 			intToBytes_bigEndian(result_pos, coeff_intvRadius);
 			result_pos += sizeof(int);
-			intToBytes_bigEndian(result_pos, treeByteSize);
-			result_pos += sizeof(int);
-			intToBytes_bigEndian(result_pos, nodeCount);
-			result_pos += sizeof(int);
-			memcpy(result_pos, treeBytes, treeByteSize);
-			result_pos += treeByteSize;
-			free(treeBytes);
-			size_t typeArray_size = 0;
-			encode(huffmanTree, coeff_type[e], reg_count, result_pos + sizeof(size_t), &typeArray_size);
-			sizeToBytes(result_pos, typeArray_size);
-			result_pos += sizeof(size_t) + typeArray_size;
+				intToBytes_bigEndian(result_pos, treeByteSize);
+				result_pos += sizeof(int);
+				intToBytes_bigEndian(result_pos, nodeCount);
+				result_pos += sizeof(int);
+				memcpy(result_pos, treeBytes, treeByteSize);
+				result_pos += treeByteSize;
+				free(treeBytes);
+				size_t typeArray_size = 0;
+				encode(huffmanTree, coeff_type[e], reg_count, result_pos + sizeof(size_t), &typeArray_size);
+				sizeToBytes(result_pos, typeArray_size);
+				result_pos += sizeof(size_t) + typeArray_size;
 			intToBytes_bigEndian(result_pos, coeff_unpredictable_count[e]);
 			result_pos += sizeof(int);
 			memcpy(result_pos, coeff_unpred_data[e], coeff_unpredictable_count[e]*sizeof(float));
 			result_pos += coeff_unpredictable_count[e]*sizeof(float);
-			SZ_ReleaseHuffman(huffmanTree);
+			
+				// printf("%lu:treeByteSize=%lu, enCodeSize=%lu\n",e, treeByteSize, typeArray_size);
+				SZ_ReleaseHuffman(huffmanTree);
 		}
 	}
 	free(coeff_result_type);
@@ -6381,15 +6923,73 @@ unsigned char * SZ_compress_float_2D_MDQ_nonblocked_with_blocked_regression(floa
 	result_pos += sizeof(size_t);
 	memcpy(result_pos, result_unpredictable_data, total_unpred * sizeof(float));
 	result_pos += total_unpred * sizeof(float);
-	size_t typeArray_size = 0;
-	encode(huffmanTree, result_type, num_elements, result_pos, &typeArray_size);
-	result_pos += typeArray_size;
+	if (confparams_cpr->entropy_type == 0) {
+		// huffman
+		huff_cost_start5();
+		size_t typeArray_size = 0;
+		encode(huffmanTree, result_type, num_elements, result_pos, &typeArray_size);
+		result_pos += typeArray_size;
+		printf("treeByteSize=%u, enCodeSize=%lu\n", treeByteSize, typeArray_size);
+		huff_cost_end5();
+		printf("[huffman]: \toutsize=%lu, time=%f\n", treeByteSize+typeArray_size+8, huffCost5 + hufftime1);
+		SZ_ReleaseHuffman(huffmanTree);
+#ifdef HAVE_WRITESTATS
+		writeHuffmanInfo(treeByteSize, typeArray_size, num_elements*sizeof(float), nodeCount);
+#endif
+	}
+	else if (confparams_cpr->entropy_type == 1) {
+		// zstd
+		huff_cost_start5();
+		unsigned short *temp = (unsigned short* )malloc(sizeof(unsigned short) * num_elements);
+		for (int i = 0; i < num_elements; i++) {
+			temp[i] = (unsigned short)result_type[i];
+		}
+		unsigned char *typeArray;
+		size_t typeArray_size = sz_lossless_compress(ZSTD_COMPRESSOR, confparams_cpr->gzipMode, (unsigned char *)temp, num_elements * 2, &typeArray);
+		huff_cost_end5();
+		printf("[zstd]: \toutsize=%lu, time=%f\n", typeArray_size, huffCost5);
+		
+		intToBytes_bigEndian(result_pos, typeArray_size);
+		result_pos += sizeof(int);
+		memcpy(result_pos, typeArray, typeArray_size);
+		result_pos += typeArray_size;
+
+		free(typeArray);
+		free(temp);
+	}
+	else {
+		// fse
+		unsigned char * FseCode = NULL;
+		size_t FseCode_size = 0;
+		unsigned char * transCodeBits = NULL;
+		size_t transCodeBits_size = 0;
+		huff_cost_start5();
+		encode_with_fse(result_type, num_elements, quantization_intervals, &FseCode, &FseCode_size, 
+					&transCodeBits, &transCodeBits_size);
+		huff_cost_end5();
+		printf("[fse]: \t\toutsize=%lu, time=%f\n", FseCode_size+transCodeBits_size+4+4, huffCost5);
+		
+		intToBytes_bigEndian(result_pos, FseCode_size);
+		result_pos += sizeof(int);
+		intToBytes_bigEndian(result_pos, transCodeBits_size);
+		result_pos += sizeof(int);
+		memcpy(result_pos, FseCode, FseCode_size);
+		result_pos += FseCode_size;
+		memcpy(result_pos, transCodeBits, transCodeBits_size);
+		result_pos += transCodeBits_size;
+
+		free(FseCode);
+		free(transCodeBits);
+	}
 
 #ifdef HAVE_WRITESTATS
-	writeHuffmanInfo(treeByteSize, typeArray_size, num_elements*sizeof(float), nodeCount);
 	writeBlockInfo(use_mean, block_size, reg_count, num_blocks);
 	writeUnpredictDataCounts(total_unpred, num_elements);
 #endif
+	for(int i=0; i<300; i++) {
+		printf("%d:%d\t",i,result_type[i]-quantization_intervals/2);
+	}
+	printf("\n");
 
 	size_t totalEncodeSize = result_pos - result;
 	free(indicator);
@@ -6397,8 +6997,8 @@ unsigned char * SZ_compress_float_2D_MDQ_nonblocked_with_blocked_regression(floa
 	free(result_type);
 	free(reg_params);
 
-	SZ_ReleaseHuffman(huffmanTree);
 	*comp_size = totalEncodeSize;
+	printf("totalByteLength=%lu\n",totalEncodeSize);
 
 	return result;
 }
@@ -7387,23 +7987,36 @@ unsigned char * SZ_compress_float_3D_MDQ_nonblocked_with_blocked_regression(floa
 
 	free(prediction_buffer_1);
 	free(prediction_buffer_2);
-
-	int stateNum = 2*quantization_intervals;
-	HuffmanTree* huffmanTree = createHuffmanTree(stateNum);
-
+	
+	// huffman
+	unsigned char *treeBytes = NULL;
+	unsigned int treeByteSize = 0;
 	size_t nodeCount = 0;
-	init(huffmanTree, result_type, num_elements);
-	size_t i = 0;
-	for (i = 0; i < huffmanTree->stateNum; i++)
-		if (huffmanTree->code[i]) nodeCount++;
-	nodeCount = nodeCount*2-1;
-
-	unsigned char *treeBytes;
-	unsigned int treeByteSize = convert_HuffTree_to_bytes_anyStates(huffmanTree, nodeCount, &treeBytes);
+	HuffmanTree* huffmanTree = NULL;
+	double hufftime1 = 0;
 
 	unsigned int meta_data_offset = 3 + 1 + MetaDataByteLength;
+
+	printf("intervals=%u\n", quantization_intervals);
+	if (confparams_cpr->entropy_type == 0) {
+		// huffman
+		huff_cost_start5();
+		int stateNum = 2*quantization_intervals;
+		huffmanTree = createHuffmanTree(stateNum);
+
+		init(huffmanTree, result_type, num_elements);
+		size_t i = 0;
+		for (i = 0; i < huffmanTree->stateNum; i++)
+			if (huffmanTree->code[i]) nodeCount++;
+		nodeCount = nodeCount*2-1;
+
+		treeByteSize = convert_HuffTree_to_bytes_anyStates(huffmanTree, nodeCount, &treeBytes);
+		huff_cost_end5();
+		hufftime1 = huffCost5;
+	}
+
 	// total size 										metadata		  # elements     real precision		intervals	nodeCount		huffman 	 	block index 						unpredicatable count						mean 					 	unpred size 				elements
-	unsigned char * result = (unsigned char *) calloc(meta_data_offset + exe_params->SZ_SIZE_TYPE + sizeof(float) + sizeof(int) + sizeof(int) + 5*treeByteSize + 4*num_blocks*sizeof(int) + num_blocks * sizeof(unsigned short) + num_blocks * sizeof(unsigned short) + num_blocks * sizeof(float) + total_unpred * sizeof(float) + num_elements * sizeof(int), 1);
+	unsigned char * result = (unsigned char *) calloc(meta_data_offset + exe_params->SZ_SIZE_TYPE + sizeof(float) + sizeof(int)+ sizeof(int) + sizeof(int) + 5*treeByteSize + 4*num_blocks*sizeof(int) + num_blocks * sizeof(unsigned short) + num_blocks * sizeof(unsigned short) + num_blocks * sizeof(float) + total_unpred * sizeof(float) + num_elements * sizeof(int), 1);
 	unsigned char * result_pos = result;
 	initRandomAccessBytes(result_pos);
 
@@ -7418,13 +8031,19 @@ unsigned char * SZ_compress_float_3D_MDQ_nonblocked_with_blocked_regression(floa
 	result_pos += sizeof(float);
 	intToBytes_bigEndian(result_pos, quantization_intervals);
 	result_pos += sizeof(int);
-	intToBytes_bigEndian(result_pos, treeByteSize);
+	intToBytes_bigEndian(result_pos, confparams_cpr->entropy_type);
 	result_pos += sizeof(int);
-	intToBytes_bigEndian(result_pos, nodeCount);
-	result_pos += sizeof(int);
-	memcpy(result_pos, treeBytes, treeByteSize);
-	result_pos += treeByteSize;
-	free(treeBytes);
+
+	if (confparams_cpr->entropy_type == 0) {
+		// huffman
+		intToBytes_bigEndian(result_pos, treeByteSize);
+		result_pos += sizeof(int);
+		intToBytes_bigEndian(result_pos, nodeCount);
+		result_pos += sizeof(int);
+		memcpy(result_pos, treeBytes, treeByteSize);
+		result_pos += treeByteSize;
+		free(treeBytes);
+	}
 
 	memcpy(result_pos, &use_mean, sizeof(unsigned char));
 	result_pos += sizeof(unsigned char);
@@ -7479,9 +8098,65 @@ unsigned char * SZ_compress_float_3D_MDQ_nonblocked_with_blocked_regression(floa
 	result_pos += sizeof(size_t);
 	memcpy(result_pos, result_unpredictable_data, total_unpred * sizeof(float));
 	result_pos += total_unpred * sizeof(float);
-	size_t typeArray_size = 0;
-	encode(huffmanTree, result_type, num_elements, result_pos, &typeArray_size);
-	result_pos += typeArray_size;
+	if (confparams_cpr->entropy_type == 0) {
+		// huffman
+		huff_cost_start5();
+		size_t typeArray_size = 0;
+		encode(huffmanTree, result_type, num_elements, result_pos, &typeArray_size);
+		result_pos += typeArray_size;
+		printf("treeByteSize=%u, enCodeSize=%lu\n", treeByteSize, typeArray_size);
+		huff_cost_end5();
+		printf("[huffman]: \toutsize=%lu, time=%f\n", treeByteSize+typeArray_size+8, huffCost5 + hufftime1);
+		SZ_ReleaseHuffman(huffmanTree);
+#ifdef HAVE_WRITESTATS
+		writeHuffmanInfo(treeByteSize, typeArray_size, num_elements*sizeof(float), nodeCount);
+#endif
+	}
+	else if (confparams_cpr->entropy_type == 1) {
+		// zstd
+		huff_cost_start5();
+		unsigned short *temp = (unsigned short* )malloc(sizeof(unsigned short) * num_elements);
+		for (int i = 0; i < num_elements; i++) {
+			temp[i] = (unsigned short)result_type[i];
+		}
+		unsigned char *typeArray;
+		size_t typeArray_size = sz_lossless_compress(ZSTD_COMPRESSOR, confparams_cpr->gzipMode, (unsigned char *)temp, num_elements * 2, &typeArray);
+		huff_cost_end5();
+		printf("[zstd]: \toutsize=%lu, time=%f\n", typeArray_size, huffCost5);
+		
+		intToBytes_bigEndian(result_pos, typeArray_size);
+		result_pos += sizeof(int);
+		memcpy(result_pos, typeArray, typeArray_size);
+		result_pos += typeArray_size;
+
+		free(typeArray);
+		free(temp);
+	}
+	else {
+		// fse
+		unsigned char * FseCode = NULL;
+		size_t FseCode_size = 0;
+		unsigned char * transCodeBits = NULL;
+		size_t transCodeBits_size = 0;
+		huff_cost_start5();
+		encode_with_fse(result_type, num_elements, quantization_intervals, &FseCode, &FseCode_size, 
+					&transCodeBits, &transCodeBits_size);
+		huff_cost_end5();
+		printf("[fse]: \t\toutsize=%lu, time=%f\n", FseCode_size+transCodeBits_size+4+4, huffCost5);
+		
+		intToBytes_bigEndian(result_pos, FseCode_size);
+		result_pos += sizeof(int);
+		intToBytes_bigEndian(result_pos, transCodeBits_size);
+		result_pos += sizeof(int);
+		memcpy(result_pos, FseCode, FseCode_size);
+		result_pos += FseCode_size;
+		memcpy(result_pos, transCodeBits, transCodeBits_size);
+		result_pos += transCodeBits_size;
+
+		free(FseCode);
+		free(transCodeBits);
+	}
+	
 	size_t totalEncodeSize = result_pos - result;
 	free(indicator);
 	free(result_unpredictable_data);
@@ -7489,13 +8164,13 @@ unsigned char * SZ_compress_float_3D_MDQ_nonblocked_with_blocked_regression(floa
 	free(reg_params);
 
 #ifdef HAVE_WRITESTATS
-	writeHuffmanInfo(treeByteSize, typeArray_size, num_elements*sizeof(float), nodeCount);
 	writeBlockInfo(use_mean, block_size, reg_count, num_blocks);
 	writeUnpredictDataCounts(total_unpred, num_elements);
 #endif
 
-	SZ_ReleaseHuffman(huffmanTree);
 	*comp_size = totalEncodeSize;
+	printf("totalByteLength=%lu\n",totalEncodeSize);
+
 	return result;
 }
 
@@ -8056,6 +8731,8 @@ unsigned char * SZ_compress_float_3D_MDQ_random_access_with_blocked_regression(f
 	}
 	free(pred_buffer);
 	int stateNum = 2*quantization_intervals;
+
+	// TODO: 添加fse
 	HuffmanTree* huffmanTree = createHuffmanTree(stateNum);
 
 	size_t nodeCount = 0;
