@@ -36,7 +36,7 @@
 #include <sys/time.h>
 #include "transcode.h"
 
-#define DISTANCE 10
+#define DISTANCE 100
 
 
 struct timeval Start5; /*only used for recording the cost*/
@@ -2266,9 +2266,10 @@ size_t dataLength, double realPrecision, float valueRangeSize, float medianValue
 float predict_compressRatio_float_2D_opt_MSST19(float *oriData, size_t r1, size_t r2, double realPrecision, unsigned int quantization_intervals, float valueRangeSize, float medianValue_f)
 {
 	printf("===Starting predicting: PW_REL 2D===\n");
-	size_t radiusIndex;
+	// size_t radiusIndex;
 	size_t dataLength = r1 * r2;
-	float pred_value = 0, pred_err;
+	float pred_value = 0;
+	double pred_err;
 	unsigned int Distance = DISTANCE;  													// 采样间隔
 	int *type = (int *)malloc(dataLength / Distance * sizeof(int)); 				// 采样得到的量化因子
 	unsigned char *sign = (unsigned char *)malloc(dataLength / Distance * sizeof(unsigned char));
@@ -2302,9 +2303,30 @@ float predict_compressRatio_float_2D_opt_MSST19(float *oriData, size_t r1, size_
 	size_t offset_count = Distance - 1; // count r2 offset
 	size_t offset_count_2;
 	float * data_pos = oriData + r2 + offset_count;
-	float divider = log2(1+realPrecision)*2;
+	// float divider = log2(1+realPrecision)*2;
 	size_t n1_count = 1; // count i sum
 	size_t len = r1 * r2;
+
+	
+	double* precisionTable = (double*)malloc(sizeof(double) * quantization_intervals);
+	double inv = 2.0-pow(2, -(confparams_cpr->plus_bits));
+	for(int i=0; i<quantization_intervals; i++){
+		double test = pow((1+realPrecision), inv*(i - intvRadius));
+		precisionTable[i] = test;
+	}
+	struct TopLevelTableWideInterval levelTable;
+	MultiLevelCacheTableWideIntervalBuild(&levelTable, precisionTable, quantization_intervals, realPrecision, confparams_cpr->plus_bits);
+    const uint64_t top = levelTable.topIndex, base = levelTable.baseIndex;
+    const uint64_t range = top - base;
+    const int bits = levelTable.bits;
+    const int shift = 52-bits;
+    uint64_t expoIndex, mantiIndex;
+    uint16_t* tables[range+1];
+    for(int i=0; i<=range; i++){
+        tables[i] = levelTable.subTables[i].table;
+    }
+    uint64_t* const buffer = (uint64_t*)&pred_err;
+
 	while(data_pos - oriData < len){
 		if(*data_pos == 0){
         	data_pos += Distance;
@@ -2314,10 +2336,12 @@ float predict_compressRatio_float_2D_opt_MSST19(float *oriData, size_t r1, size_
             sign[totalSampleSize] = 1;
             positive = false;
         }
-		pred_value = data_pos[-1] + data_pos[-r2] - data_pos[-r2-1];
-		pred_err = fabs(pred_value / *data_pos);
-		radiusIndex = (unsigned long)fabs(log2(pred_err)/divider+0.5);
-		if(radiusIndex >= intvRadius) {
+		pred_value = data_pos[-1] * data_pos[-r2] / data_pos[-r2-1];
+		pred_err = *data_pos / pred_value;
+		expoIndex = ((*buffer & 0x7fffffffffffffff) >> 52) - base;
+		// pred_err = fabs(pred_value / *data_pos);
+		// radiusIndex = (unsigned long)fabs(log2(pred_err)/divider+0.5);
+		if(expoIndex > range) {
 			exactNum++;
 			type[totalSampleSize++] = 0;
 			
@@ -2327,13 +2351,10 @@ float predict_compressRatio_float_2D_opt_MSST19(float *oriData, size_t r1, size_
 			addExactData(exactMidByteArray, exactLeadNumArray, resiBitArray, lce);
 		
 		}
-		else if(*data_pos>=pred_value)
-		{
-			type[totalSampleSize++] = intvRadius+radiusIndex;
-		}
 		else //curData<pred
 		{
-			type[totalSampleSize++] = intvRadius-radiusIndex;
+			mantiIndex = (*buffer & 0x000fffffffffffff) >> shift;
+			type[totalSampleSize++] = tables[expoIndex][mantiIndex];
 		}
 
 		offset_count += Distance;
@@ -5963,7 +5984,7 @@ float predict_compressRatio_float_2D_with_freq_and_dense_pos(float *oriData, siz
 	unsigned char preDataBytes[4];
 	intToBytes_bigEndian(preDataBytes, 0);
 
-	int reqBytesLength = reqLength/8;
+	// int reqBytesLength = reqLength/8;
 	int resiBitsLength = reqLength%8;
 
 	FloatValueCompressElement *vce = (FloatValueCompressElement*)malloc(sizeof(FloatValueCompressElement));
@@ -6058,7 +6079,7 @@ float predict_compressRatio_float_2D_with_freq_and_dense_pos(float *oriData, siz
 	outSize += exactNum * sizeof(float);
 	float expected_ratio = (sample_count * 1.0 * sizeof(float)) / outSize;
 	printf("[predicting stats]: DataLength=%lu, SampleLength=%lu, exactNum=%lu, tmpOutSize=%lu, outSize=%lu\n", dataLength, sample_count, exactNum, tmpOutSize, outSize);
-	printf("===Finishing predicting: ABS 2D===\n",expected_ratio);
+	printf("===Finishing predicting: ABS 2D===\n");
 	return expected_ratio;
 }
 
@@ -6902,7 +6923,6 @@ unsigned char * SZ_compress_float_2D_MDQ_nonblocked_with_blocked_regression(floa
 
 	size_t indicator_size = convertIntArray2ByteArray_fast_1b_to_result(indicator, num_blocks, result_pos);
 	result_pos += indicator_size;
-	printf("indicator_size=%d\n",indicator_size);
 
 	//convert the lead/mid/resi to byte stream
 	if(reg_count>0){
@@ -6949,7 +6969,6 @@ unsigned char * SZ_compress_float_2D_MDQ_nonblocked_with_blocked_regression(floa
 	memcpy(result_pos, &total_unpred, sizeof(size_t));
 	result_pos += sizeof(size_t);
 	memcpy(result_pos, result_unpredictable_data, total_unpred * sizeof(float));
-	printf("result_unpredictable_data=%d\n",total_unpred * sizeof(float));
 	result_pos += total_unpred * sizeof(float);
 	if (confparams_cpr->entropy_type == 0) {
 		// huffman
