@@ -36,7 +36,7 @@
 #include <sys/time.h>
 #include "transcode.h"
 
-#define DISTANCE 100
+#define DISTANCE 10
 
 
 struct timeval Start5; /*only used for recording the cost*/
@@ -2270,7 +2270,9 @@ float predict_compressRatio_float_2D_opt_MSST19(float *oriData, size_t r1, size_
 	size_t dataLength = r1 * r2;
 	float pred_value = 0, pred_err;
 	unsigned int Distance = DISTANCE;  													// 采样间隔
-	int *type = (int *)malloc(dataLength / Distance * sizeof(int) * 2); 				// 采样得到的量化因子
+	int *type = (int *)malloc(dataLength / Distance * sizeof(int)); 				// 采样得到的量化因子
+	unsigned char *sign = (unsigned char *)malloc(dataLength / Distance * sizeof(unsigned char));
+	int positive = true;
 	size_t totalSampleSize = 0;
 
 // definitions of unpredictable data
@@ -2308,6 +2310,10 @@ float predict_compressRatio_float_2D_opt_MSST19(float *oriData, size_t r1, size_
         	data_pos += Distance;
         	continue;
 		}
+		if(*data_pos < 0){
+            sign[totalSampleSize] = 1;
+            positive = false;
+        }
 		pred_value = data_pos[-1] + data_pos[-r2] - data_pos[-r2-1];
 		pred_err = fabs(pred_value / *data_pos);
 		radiusIndex = (unsigned long)fabs(log2(pred_err)/divider+0.5);
@@ -2352,7 +2358,14 @@ float predict_compressRatio_float_2D_opt_MSST19(float *oriData, size_t r1, size_
 			resiBitArray->array, resiBitArray->size,
 			resiBitsLength,
 			realPrecision, medianValue, (char)reqLength, quantization_intervals, NULL, 0, 0);
-
+	
+	if(!positive){
+		unsigned char * comp_signs;
+		// compress signs
+		unsigned long signSize = sz_lossless_compress(ZSTD_COMPRESSOR, 3, sign, totalSampleSize, &comp_signs);
+		tdps->pwrErrBoundBytes = comp_signs;
+		tdps->pwrErrBoundBytes_size = signSize;
+	}
 	unsigned char *tmpCompBytes;
 	size_t tmpOutSize;
 	convertTDPStoFlatBytes_float(tdps, &tmpCompBytes, &tmpOutSize);
@@ -5974,10 +5987,10 @@ float predict_compressRatio_float_2D_with_freq_and_dense_pos(float *oriData, siz
 			exactNum++;
 			type[sample_count++] = 0;
 
-			compressSingleFloatValue(vce, *data_pos, realPrecision, medianValue, reqLength, reqBytesLength, resiBitsLength);
-			updateLossyCompElement_Float(vce->curBytes, preDataBytes, reqBytesLength, resiBitsLength, lce);
-			memcpy(preDataBytes,vce->curBytes,4);
-			addExactData(exactMidByteArray, exactLeadNumArray, resiBitArray, lce);
+			// compressSingleFloatValue(vce, *data_pos, realPrecision, medianValue, reqLength, reqBytesLength, resiBitsLength);
+			// updateLossyCompElement_Float(vce->curBytes, preDataBytes, reqBytesLength, resiBitsLength, lce);
+			// memcpy(preDataBytes,vce->curBytes,4);
+			// addExactData(exactMidByteArray, exactLeadNumArray, resiBitArray, lce);
 		}
 		else if(*data_pos>=pred_value)
 		{
@@ -6041,9 +6054,11 @@ float predict_compressRatio_float_2D_with_freq_and_dense_pos(float *oriData, siz
 	free(type);
 	free(exactMidByteArray); 
 
-	float expected_ratio = (sample_count * 4.0) / outSize;
+	printf("exactNum=%lu", exactNum * sizeof(float));
+	outSize += exactNum * sizeof(float);
+	float expected_ratio = (sample_count * 1.0 * sizeof(float)) / outSize;
 	printf("[predicting stats]: DataLength=%lu, SampleLength=%lu, exactNum=%lu, tmpOutSize=%lu, outSize=%lu\n", dataLength, sample_count, exactNum, tmpOutSize, outSize);
-	printf("===Finishing predicting: ABS 2D===\n");
+	printf("===Finishing predicting: ABS 2D===\n",expected_ratio);
 	return expected_ratio;
 }
 
@@ -6572,7 +6587,6 @@ unsigned char * SZ_compress_float_2D_MDQ_nonblocked_with_blocked_regression(floa
 				}
 				if(use_reg)
 				{
-					printf("use_reg\n");
 					{
 						/*predict coefficients in current block via previous reg_block*/
 						float cur_coeff;
@@ -6888,6 +6902,7 @@ unsigned char * SZ_compress_float_2D_MDQ_nonblocked_with_blocked_regression(floa
 
 	size_t indicator_size = convertIntArray2ByteArray_fast_1b_to_result(indicator, num_blocks, result_pos);
 	result_pos += indicator_size;
+	printf("indicator_size=%d\n",indicator_size);
 
 	//convert the lead/mid/resi to byte stream
 	if(reg_count>0){
@@ -6934,6 +6949,7 @@ unsigned char * SZ_compress_float_2D_MDQ_nonblocked_with_blocked_regression(floa
 	memcpy(result_pos, &total_unpred, sizeof(size_t));
 	result_pos += sizeof(size_t);
 	memcpy(result_pos, result_unpredictable_data, total_unpred * sizeof(float));
+	printf("result_unpredictable_data=%d\n",total_unpred * sizeof(float));
 	result_pos += total_unpred * sizeof(float);
 	if (confparams_cpr->entropy_type == 0) {
 		// huffman
@@ -6979,7 +6995,8 @@ unsigned char * SZ_compress_float_2D_MDQ_nonblocked_with_blocked_regression(floa
 		encode_with_fse(result_type, num_elements, quantization_intervals, &FseCode, &FseCode_size, 
 					&transCodeBits, &transCodeBits_size);
 		huff_cost_end5();
-		printf("[fse]: \t\toutsize=%lu, time=%f\n", FseCode_size+transCodeBits_size+4+4, huffCost5);
+		size_t csize = FseCode_size+transCodeBits_size+4+4;
+		printf("[fse]: \t\tratio=%f, outsize=%lu, time=%f\n", (num_elements*4.0) / (csize-8), csize, huffCost5);
 		
 		intToBytes_bigEndian(result_pos, FseCode_size);
 		result_pos += sizeof(int);
@@ -6998,10 +7015,6 @@ unsigned char * SZ_compress_float_2D_MDQ_nonblocked_with_blocked_regression(floa
 	writeBlockInfo(use_mean, block_size, reg_count, num_blocks);
 	writeUnpredictDataCounts(total_unpred, num_elements);
 #endif
-	for(int i=0; i<300; i++) {
-		printf("%d:%d\t",i,result_type[i]-quantization_intervals/2);
-	}
-	printf("\n");
 
 	size_t totalEncodeSize = result_pos - result;
 	free(indicator);
@@ -8154,7 +8167,8 @@ unsigned char * SZ_compress_float_3D_MDQ_nonblocked_with_blocked_regression(floa
 		encode_with_fse(result_type, num_elements, quantization_intervals, &FseCode, &FseCode_size, 
 					&transCodeBits, &transCodeBits_size);
 		huff_cost_end5();
-		printf("[fse]: \t\toutsize=%lu, time=%f\n", FseCode_size+transCodeBits_size+4+4, huffCost5);
+		size_t csize = FseCode_size+transCodeBits_size+4+4;
+		printf("[fse]: \t\tratio=%f, outsize=%lu, time=%f\n", (num_elements*4.0) / (csize-8), csize, huffCost5);
 		
 		intToBytes_bigEndian(result_pos, FseCode_size);
 		result_pos += sizeof(int);
