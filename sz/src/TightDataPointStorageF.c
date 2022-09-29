@@ -369,17 +369,17 @@ void new_TightDataPointStorageF(TightDataPointStorageF **this,
 	int stateNum = 2*intervals;
 	printf("intervals=%u\n", intervals);
 
-	// prediction
-	unsigned int Distance = 10;  	// 采样间隔
-	int *type2 = (int *)malloc(dataSeriesLength / Distance * sizeof(int) * 2); 
-	int totalSampleSize = 0;
+	// // prediction
+	// unsigned int Distance = 10;  	
+	// int *type2 = (int *)malloc(dataSeriesLength / Distance * sizeof(int) * 2); 
+	// int totalSampleSize = 0;
 
-	for(int j=Distance; j<dataSeriesLength; j+=Distance) {
-		type2[totalSampleSize++] = type[j];
-	}
+	// for(int j=Distance; j<dataSeriesLength; j+=Distance) {
+	// 	type2[totalSampleSize++] = type[j];
+	// }
 
 	if ((*this)->entropyType == 0) {
-		// prediction
+		// // prediction
 		// huff_cost_start();
 		// size_t sample_huf_size;
 		// unsigned char *sample_hufcode;
@@ -404,7 +404,7 @@ void new_TightDataPointStorageF(TightDataPointStorageF **this,
 
 		huff_cost_end();
 		// printf("[huffman]: \tratio=%f, outsize=%lu, time=%f\n", (dataSeriesLength*4.0) / ((*this)->typeArray_size-8), (*this)->typeArray_size, huffCost);
-		printf("[huffman]: \toutsize=%lu, time=%f\n", (*this)->typeArray_size, huffCost);
+		printf("[huffman]: \tratio=%f, outsize=%lu, time=%f\n", (dataSeriesLength*4.0) / (*this)->typeArray_size, (*this)->typeArray_size, huffCost);
 	} 
 	else if ((*this)->entropyType == 1) {
 		// zstd
@@ -421,26 +421,26 @@ void new_TightDataPointStorageF(TightDataPointStorageF **this,
 		// printf("confparams_cpr->gzipMode=%d", confparams_cpr->gzipMode);
 		(*this)->typeArray_size = sz_lossless_compress(ZSTD_COMPRESSOR, confparams_cpr->gzipMode, (unsigned char *)temp, dataSeriesLength * 2, &(*this)->typeArray);
 		huff_cost_end();
-		printf("[zstd]: \toutsize=%lu, time=%f\n", (*this)->typeArray_size, huffCost);
+		printf("[zstd]: \tratio=%f, outsize=%lu, time=%f\n", (dataSeriesLength*4.0) / (*this)->typeArray_size, (*this)->typeArray_size, huffCost);
 		
 		free(temp);
 	}
 	else {
 		size_t csize;
 
-		// prediction
-		huff_cost_start();
-		size_t sample_fse_size, sample_transcode_size;
-		unsigned char *sample_fsecode, *sample_transcode;
-		encode_with_fse(type2, totalSampleSize, intervals, &sample_fsecode, &sample_fse_size, 
-					&sample_transcode, &sample_transcode_size);
-		huff_cost_end();
+		// // prediction
+		// huff_cost_start();
+		// size_t sample_fse_size, sample_transcode_size;
+		// unsigned char *sample_fsecode, *sample_transcode;
+		// encode_with_fse(type2, totalSampleSize, intervals, &sample_fsecode, &sample_fse_size, 
+		// 			&sample_transcode, &sample_transcode_size);
+		// huff_cost_end();
 
-		csize = sample_fse_size+sample_transcode_size+4+4;
-		printf("[fse-predict]: \tratio=%f, outsize=%lu, time=%f\n", (totalSampleSize*4.0) / (csize-8), csize, huffCost);
-		free(sample_fsecode);
-		free(sample_transcode);
-		free(type2);
+		// csize = sample_fse_size+sample_transcode_size+4+4;
+		// printf("[fse-predict]: \tratio=%f, outsize=%lu, time=%f\n", (totalSampleSize*4.0) / (csize-8), csize, huffCost);
+		// free(sample_fsecode);
+		// free(sample_transcode);
+		// free(type2);
 
 		// fse
 		huff_cost_start();
@@ -448,7 +448,7 @@ void new_TightDataPointStorageF(TightDataPointStorageF **this,
 					&((*this)->transCodeBits), &((*this)->transCodeBits_size));
 		huff_cost_end();
 		csize = (*this)->FseCode_size+(*this)->transCodeBits_size+4+4;
-		printf("[fse]: \t\tratio=%f, outsize=%lu, time=%f\n", (dataSeriesLength*4.0) / (csize-8), csize, huffCost);
+		printf("[fse]: \t\tratio=%f, outsize=%lu, time=%f\n", (dataSeriesLength*4.0) / csize, csize, huffCost);
 		// printf("[fse]: \t\toutsize=%lu, time=%f\n", csize, huffCost);
 		
 
@@ -510,6 +510,7 @@ void new_TightDataPointStorageF2(TightDataPointStorageF **this,
 	(*this)->rtypeArray_size = 0;
 
 	int stateNum = 2*intervals;
+	size_t csize;
 	if ((*this)->entropyType == 0) {
 		// huffman
 		huff_cost_start();
@@ -519,7 +520,7 @@ void new_TightDataPointStorageF2(TightDataPointStorageF **this,
 
 
 		huff_cost_end();
-		printf("[huffman]: \toutsize=%lu, time=%f\n", (*this)->typeArray_size, huffCost);
+		printf("[huffman]: \tratio=%f, outsize=%lu, time=%f\n", (dataSeriesLength*4.0) / (*this)->typeArray_size, (*this)->typeArray_size, huffCost);
 		// printf("huff: time=%f\n", huffCost);
 	} 
 	else if ((*this)->entropyType == 1) {
@@ -537,7 +538,7 @@ void new_TightDataPointStorageF2(TightDataPointStorageF **this,
 		// printf("confparams_cpr->gzipMode=%d", confparams_cpr->gzipMode);
 		(*this)->typeArray_size = sz_lossless_compress(ZSTD_COMPRESSOR, confparams_cpr->gzipMode, (unsigned char *)temp, dataSeriesLength * 2, &(*this)->typeArray);
 		huff_cost_end();
-		printf("[zstd]: \toutsize=%lu, time=%f\n", (*this)->typeArray_size, huffCost);
+		printf("[zstd]: \tratio=%f, outsize=%lu, time=%f\n", (dataSeriesLength*4.0) / (*this)->typeArray_size, (*this)->typeArray_size, huffCost);
 		
 		free(temp);
 	}
@@ -547,7 +548,8 @@ void new_TightDataPointStorageF2(TightDataPointStorageF **this,
 		encode_with_fse(type, dataSeriesLength, intervals, &((*this)->FseCode), &((*this)->FseCode_size), 
 					&((*this)->transCodeBits), &((*this)->transCodeBits_size));
 		huff_cost_end();
-		printf("[fse]: \t\toutsize=%lu, time=%f\n", (*this)->FseCode_size+(*this)->transCodeBits_size+4+4, huffCost);
+		csize = (*this)->FseCode_size+(*this)->transCodeBits_size+4+4;
+		printf("[fse]: \t\tratio=%f, outsize=%lu, time=%f\n", (dataSeriesLength*4.0) / csize, csize, huffCost);
 		// printf("fse: time=%f\n", huffCost);
 
 		// int* type2 = (int*)malloc(dataSeriesLength*sizeof(int));

@@ -18,7 +18,7 @@
 #include "szd_float_ts.h"
 #include "utility.h"
 #include "transcode.h"
-// #define TIMER__
+#define TIMER__
 #ifdef TIMER__
 #include <sys/time.h>
 
@@ -40,27 +40,6 @@ void huff_cost_end4()
 	huffCost4 += elapsed;
 }
 #endif
-
-//struct timeval startTime_;
-//struct timeval endTime_;  /* Start and end times */
-//struct timeval costStart_; /*only used for recording the cost*/
-//double totalCost_ = 0;
-
-/*void cost_start_()
-{
-	totalCost_ = 0;
-	gettimeofday(&costStart_, NULL);
-}
-
-void cost_end_()
-{
-	double elapsed;
-	struct timeval costEnd;
-	gettimeofday(&costEnd, NULL);
-	elapsed = ((costEnd.tv_sec*1000000+costEnd.tv_usec)-(costStart_.tv_sec*1000000+costStart_.tv_usec))/1000000.0;
-	totalCost_ += elapsed;
-}*/
-
 
 /**
  * 
@@ -222,6 +201,9 @@ void decompressDataSeries_float_1D(float** data, size_t dataSeriesLength, float*
 
 	int* type = (int*)malloc(dataSeriesLength*sizeof(int));
 	
+#ifdef TIMER__
+	huff_cost_start4();
+#endif
 	if (tdps->entropyType == 0) {
 		HuffmanTree* huffmanTree = createHuffmanTree(tdps->stateNum);
 		decode_withTree(huffmanTree, tdps->typeArray, dataSeriesLength, type);
@@ -241,6 +223,11 @@ void decompressDataSeries_float_1D(float** data, size_t dataSeriesLength, float*
 		decode_with_fse(type, dataSeriesLength, tdps->intervals, tdps->FseCode, tdps->FseCode_size, 
 					tdps->transCodeBits, tdps->transCodeBits_size);
 	}
+#ifdef TIMER__
+    huff_cost_end4();
+    printf("[decoder]: time=%f\n", huffCost4);
+
+#endif
 
 
 	unsigned char preBytes[4];
@@ -344,6 +331,9 @@ void decompressDataSeries_float_2D(float** data, size_t r1, size_t r2, float* hi
 
 	int* type = (int*)malloc(dataSeriesLength*sizeof(int));
 
+#ifdef TIMER__
+	huff_cost_start4();
+#endif
 	if (tdps->entropyType == 0) {
 		HuffmanTree* huffmanTree = createHuffmanTree(tdps->stateNum);
 		decode_withTree(huffmanTree, tdps->typeArray, dataSeriesLength, type);
@@ -363,6 +353,11 @@ void decompressDataSeries_float_2D(float** data, size_t r1, size_t r2, float* hi
 		decode_with_fse(type, dataSeriesLength, tdps->intervals, tdps->FseCode, tdps->FseCode_size, 
 					tdps->transCodeBits, tdps->transCodeBits_size);
 	}
+#ifdef TIMER__
+    huff_cost_end4();
+    printf("[decoder]: time=%f\n", huffCost4);
+
+#endif
 
 	unsigned char preBytes[4];
 	unsigned char curBytes[4];
@@ -696,7 +691,7 @@ void decompressDataSeries_float_3D(float** data, size_t r1, size_t r2, size_t r3
 	}
 #ifdef TIMER__
     huff_cost_end4();
-    printf("[huf/fse]: time=%f\n", huffCost4);
+    printf("[decoder]: time=%f\n", huffCost4);
 
 #endif
 	unsigned char preBytes[4];
@@ -1236,6 +1231,9 @@ void decompressDataSeries_float_4D(float** data, size_t r1, size_t r2, size_t r3
 	*data = (float*)malloc(sizeof(float)*dataSeriesLength);
 	int* type = (int*)malloc(dataSeriesLength*sizeof(int));
 
+#ifdef TIMER__
+	huff_cost_start4();
+#endif
 	if (tdps->entropyType == 0) {
 		HuffmanTree* huffmanTree = createHuffmanTree(tdps->stateNum);
 		decode_withTree(huffmanTree, tdps->typeArray, dataSeriesLength, type);
@@ -1255,6 +1253,11 @@ void decompressDataSeries_float_4D(float** data, size_t r1, size_t r2, size_t r3
 		decode_with_fse(type, dataSeriesLength, tdps->intervals, tdps->FseCode, tdps->FseCode_size, 
 					tdps->transCodeBits, tdps->transCodeBits_size);
 	}
+#ifdef TIMER__
+    huff_cost_end4();
+    printf("[decoder]: time=%f\n", huffCost4);
+
+#endif
 
 	unsigned char preBytes[4];
 	unsigned char curBytes[4];
@@ -1812,6 +1815,9 @@ void decompressDataSeries_float_1D_MSST19(float** data, size_t dataSeriesLength,
 
 	int* type = (int*)malloc(dataSeriesLength*sizeof(int));
 
+#ifdef TIMER__
+	huff_cost_start4();
+#endif
 	if (tdps->entropyType == 0) {
 		HuffmanTree* huffmanTree = createHuffmanTree(tdps->stateNum);
 		decode_withTree_MSST19(huffmanTree, tdps->typeArray, dataSeriesLength, type, tdps->max_bits);
@@ -1831,6 +1837,11 @@ void decompressDataSeries_float_1D_MSST19(float** data, size_t dataSeriesLength,
 		decode_with_fse(type, dataSeriesLength, tdps->intervals, tdps->FseCode, tdps->FseCode_size, 
 					tdps->transCodeBits, tdps->transCodeBits_size);
 	}
+#ifdef TIMER__
+    huff_cost_end4();
+    printf("[decoder]: time=%f\n", huffCost4);
+
+#endif
 
 	unsigned char preBytes[4];
 	unsigned char curBytes[4];
@@ -1942,6 +1953,9 @@ void decompressDataSeries_float_2D_MSST19(float** data, size_t r1, size_t r2, Ti
 
     int* type = (int*)malloc(dataSeriesLength*sizeof(int));
 
+#ifdef TIMER__
+	huff_cost_start4();
+#endif
 	if (tdps->entropyType == 0) {
 		HuffmanTree* huffmanTree = createHuffmanTree(tdps->stateNum);
 		decode_withTree_MSST19(huffmanTree, tdps->typeArray, dataSeriesLength, type, tdps->max_bits);
@@ -1961,6 +1975,11 @@ void decompressDataSeries_float_2D_MSST19(float** data, size_t r1, size_t r2, Ti
 		decode_with_fse(type, dataSeriesLength, tdps->intervals, tdps->FseCode, tdps->FseCode_size, 
 					tdps->transCodeBits, tdps->transCodeBits_size);
 	}
+#ifdef TIMER__
+    huff_cost_end4();
+    printf("[decoder]: time=%f\n", huffCost4);
+
+#endif
 
 	unsigned char preBytes[4];
 	unsigned char curBytes[4];
@@ -2309,7 +2328,7 @@ void decompressDataSeries_float_3D_MSST19(float** data, size_t r1, size_t r2, si
 
 #ifdef TIMER__
     huff_cost_end4();
-    printf("[huf/fse]: time=%f\n", huffCost4);
+    printf("[decoder]: time=%f\n", huffCost4);
 
 #endif
 	unsigned char preBytes[4];
@@ -3405,6 +3424,9 @@ void decompressDataSeries_float_2D_nonblocked_with_blocked_regression(float** da
 
 	int * result_type = (int *) malloc(num_elements * sizeof(int));
 
+#ifdef TIMER__
+	huff_cost_start4();
+#endif
 	if (entropyType == 0) {
 		// huffman
 		decode(comp_data_pos, num_elements, root, result_type);
@@ -3432,6 +3454,11 @@ void decompressDataSeries_float_2D_nonblocked_with_blocked_regression(float** da
 		decode_with_fse(result_type, num_elements, intervals, comp_data_pos, FseCode_size, 
 					comp_data_pos+FseCode_size, transCodeBits_size);
 	}
+#ifdef TIMER__
+    huff_cost_end4();
+    printf("[decoder]: time=%f\n", huffCost4);
+
+#endif
 	
 	int intvRadius = intervals/2;
 	
@@ -3782,6 +3809,9 @@ void decompressDataSeries_float_3D_nonblocked_with_blocked_regression(float** da
 
 	int * result_type = (int *) malloc(num_elements * sizeof(int));
 
+#ifdef TIMER__
+	huff_cost_start4();
+#endif
 	if (entropyType == 0) {
 		// huffman
 		decode(comp_data_pos, num_elements, root, result_type);
@@ -3809,6 +3839,11 @@ void decompressDataSeries_float_3D_nonblocked_with_blocked_regression(float** da
 		decode_with_fse(result_type, num_elements, intervals, comp_data_pos, FseCode_size, 
 					comp_data_pos+FseCode_size, transCodeBits_size);
 	}
+#ifdef TIMER__
+    huff_cost_end4();
+    printf("[decoder]: time=%f\n", huffCost4);
+
+#endif
 
 	int intvRadius = intervals/2;
 	

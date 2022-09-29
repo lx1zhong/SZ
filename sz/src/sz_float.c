@@ -6978,7 +6978,7 @@ unsigned char * SZ_compress_float_2D_MDQ_nonblocked_with_blocked_regression(floa
 		result_pos += typeArray_size;
 		printf("treeByteSize=%u, enCodeSize=%lu\n", treeByteSize, typeArray_size);
 		huff_cost_end5();
-		printf("[huffman]: \toutsize=%lu, time=%f\n", treeByteSize+typeArray_size+8, huffCost5 + hufftime1);
+		printf("[huffman]: \tratio=%f, outsize=%lu, time=%f\n", (num_elements*4.0) / (treeByteSize+typeArray_size+8), treeByteSize+typeArray_size+8, huffCost5 + hufftime1);
 		SZ_ReleaseHuffman(huffmanTree);
 #ifdef HAVE_WRITESTATS
 		writeHuffmanInfo(treeByteSize, typeArray_size, num_elements*sizeof(float), nodeCount);
@@ -6994,7 +6994,7 @@ unsigned char * SZ_compress_float_2D_MDQ_nonblocked_with_blocked_regression(floa
 		unsigned char *typeArray;
 		size_t typeArray_size = sz_lossless_compress(ZSTD_COMPRESSOR, confparams_cpr->gzipMode, (unsigned char *)temp, num_elements * 2, &typeArray);
 		huff_cost_end5();
-		printf("[zstd]: \toutsize=%lu, time=%f\n", typeArray_size, huffCost5);
+		printf("[zstd]: \tratio=%f, outsize=%lu, time=%f\n", (num_elements*4.0) / typeArray_size, typeArray_size, huffCost5);
 		
 		intToBytes_bigEndian(result_pos, typeArray_size);
 		result_pos += sizeof(int);
@@ -7015,7 +7015,7 @@ unsigned char * SZ_compress_float_2D_MDQ_nonblocked_with_blocked_regression(floa
 					&transCodeBits, &transCodeBits_size);
 		huff_cost_end5();
 		size_t csize = FseCode_size+transCodeBits_size+4+4;
-		printf("[fse]: \t\tratio=%f, outsize=%lu, time=%f\n", (num_elements*4.0) / (csize-8), csize, huffCost5);
+		printf("[fse]: \t\tratio=%f, outsize=%lu, time=%f\n", (num_elements*4.0) / csize, csize, huffCost5);
 		
 		intToBytes_bigEndian(result_pos, FseCode_size);
 		result_pos += sizeof(int);
@@ -8142,6 +8142,7 @@ unsigned char * SZ_compress_float_3D_MDQ_nonblocked_with_blocked_regression(floa
 	result_pos += sizeof(size_t);
 	memcpy(result_pos, result_unpredictable_data, total_unpred * sizeof(float));
 	result_pos += total_unpred * sizeof(float);
+	size_t csize;
 	if (confparams_cpr->entropy_type == 0) {
 		// huffman
 		huff_cost_start5();
@@ -8150,7 +8151,8 @@ unsigned char * SZ_compress_float_3D_MDQ_nonblocked_with_blocked_regression(floa
 		result_pos += typeArray_size;
 		printf("treeByteSize=%u, enCodeSize=%lu\n", treeByteSize, typeArray_size);
 		huff_cost_end5();
-		printf("[huffman]: \toutsize=%lu, time=%f\n", treeByteSize+typeArray_size+8, huffCost5 + hufftime1);
+		csize = treeByteSize+typeArray_size+8;
+		printf("[huffman]: \tratio=%f, outsize=%lu, time=%f\n", (num_elements * 4.0) / csize, csize, huffCost5 + hufftime1);
 		SZ_ReleaseHuffman(huffmanTree);
 #ifdef HAVE_WRITESTATS
 		writeHuffmanInfo(treeByteSize, typeArray_size, num_elements*sizeof(float), nodeCount);
@@ -8166,7 +8168,7 @@ unsigned char * SZ_compress_float_3D_MDQ_nonblocked_with_blocked_regression(floa
 		unsigned char *typeArray;
 		size_t typeArray_size = sz_lossless_compress(ZSTD_COMPRESSOR, confparams_cpr->gzipMode, (unsigned char *)temp, num_elements * 2, &typeArray);
 		huff_cost_end5();
-		printf("[zstd]: \toutsize=%lu, time=%f\n", typeArray_size, huffCost5);
+		printf("[zstd]: \tratio=%f, outsize=%lu, time=%f\n", (num_elements*4.0) / typeArray_size, typeArray_size, huffCost5);
 		
 		intToBytes_bigEndian(result_pos, typeArray_size);
 		result_pos += sizeof(int);
@@ -8186,8 +8188,8 @@ unsigned char * SZ_compress_float_3D_MDQ_nonblocked_with_blocked_regression(floa
 		encode_with_fse(result_type, num_elements, quantization_intervals, &FseCode, &FseCode_size, 
 					&transCodeBits, &transCodeBits_size);
 		huff_cost_end5();
-		size_t csize = FseCode_size+transCodeBits_size+4+4;
-		printf("[fse]: \t\tratio=%f, outsize=%lu, time=%f\n", (num_elements*4.0) / (csize-8), csize, huffCost5);
+		csize = FseCode_size+transCodeBits_size+4+4;
+		printf("[fse]: \t\tratio=%f, outsize=%lu, time=%f\n", (num_elements*4.0) / csize, csize, huffCost5);
 		
 		intToBytes_bigEndian(result_pos, FseCode_size);
 		result_pos += sizeof(int);
@@ -8777,7 +8779,6 @@ unsigned char * SZ_compress_float_3D_MDQ_random_access_with_blocked_regression(f
 	free(pred_buffer);
 	int stateNum = 2*quantization_intervals;
 
-	// TODO: 添加fse
 	HuffmanTree* huffmanTree = createHuffmanTree(stateNum);
 
 	size_t nodeCount = 0;

@@ -365,6 +365,7 @@ void new_TightDataPointStorageD(TightDataPointStorageD **this,
 	(*this)->rtypeArray_size = 0;
 
 	int stateNum = 2*intervals;
+	size_t csize;
 	printf("intervals=%u\n", intervals);
 
 	if ((*this)->entropyType == 0) {
@@ -377,7 +378,7 @@ void new_TightDataPointStorageD(TightDataPointStorageD **this,
 			encode_withTree(huffmanTree, type, dataSeriesLength, &(*this)->typeArray, &(*this)->typeArray_size);
 		SZ_ReleaseHuffman(huffmanTree);
 		huff_cost_end2();
-		printf("[huffman]: \toutsize=%lu, time=%f\n", (*this)->typeArray_size, huffCost2);
+		printf("[huffman]: \tratio=%f, outsize=%lu, time=%f\n", (dataSeriesLength*8.0) / (*this)->typeArray_size, (*this)->typeArray_size, huffCost2);
 		// printf("huff: time=%f\n", huffCost2);
 	} 
 	else if ((*this)->entropyType == 1) {
@@ -387,7 +388,7 @@ void new_TightDataPointStorageD(TightDataPointStorageD **this,
 		for (int i = 0; i < dataSeriesLength; i++) {
 			temp[i] = (unsigned short)type[i];
 		}
-		// FILE *fp = fopen("/home/lxzhong/tmp/type_array.bin", "wb");
+		// FILE *fp = fopen("/home/zhongyu/tmp/type_array.bin", "wb");
 		// fwrite((void *)temp, sizeof(unsigned short), dataSeriesLength, fp);
 		// fclose(fp);
 
@@ -395,7 +396,7 @@ void new_TightDataPointStorageD(TightDataPointStorageD **this,
 		// printf("confparams_cpr->gzipMode=%d", confparams_cpr->gzipMode);
 		(*this)->typeArray_size = sz_lossless_compress(ZSTD_COMPRESSOR, confparams_cpr->gzipMode, (unsigned char *)temp, dataSeriesLength * 2, &(*this)->typeArray);
 		huff_cost_end2();
-		printf("[zstd]: \toutsize=%lu, time=%f\n", (*this)->typeArray_size, huffCost2);
+		printf("[zstd]: \tratio=%f, outsize=%lu, time=%f\n", (dataSeriesLength*8.0) / (*this)->typeArray_size, (*this)->typeArray_size, huffCost2);
 		
 		free(temp);
 	}
@@ -405,7 +406,8 @@ void new_TightDataPointStorageD(TightDataPointStorageD **this,
 		encode_with_fse(type, dataSeriesLength, intervals, &((*this)->FseCode), &((*this)->FseCode_size), 
 					&((*this)->transCodeBits), &((*this)->transCodeBits_size));
 		huff_cost_end2();
-		printf("[fse]: \t\toutsize=%lu, time=%f\n", (*this)->FseCode_size+(*this)->transCodeBits_size+4+4, huffCost2);
+		csize = (*this)->FseCode_size+(*this)->transCodeBits_size+4+4;
+		printf("[fse]: \t\tratio=%f, outsize=%lu, time=%f\n", (dataSeriesLength*8.0) / csize, csize, huffCost2);
 		// printf("fse: time=%f\n", huffCost2);
 
 		// int* type2 = (int*)malloc(dataSeriesLength*sizeof(int));
