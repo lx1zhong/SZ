@@ -59,7 +59,7 @@ add_library (SZ ${BUILD_EXT_LIBS_TYPE}
   src/TightDataPointStorageD.c
   src/TightDataPointStorageF.c
   src/TightDataPointStorageI.c
-  src/trancode.c
+  src/transcode.c
   src/TypeManager.c
   src/utility.c
   src/VarSet.c

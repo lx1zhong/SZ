@@ -152,7 +152,7 @@ am__libSZ_la_SOURCES_DIST = src/MultiLevelCacheTable.c \
 	src/TightDataPointStorageD.c src/TightDataPointStorageF.c \
 	src/conf.c src/DynamicDoubleArray.c src/TypeManager.c \
 	src/dictionary.c src/DynamicFloatArray.c src/VarSet.c \
-	src/callZlib.c src/Huffman.c src/sz_float.c src/sz_double.c \
+	src/callZlib.c src/Huffman.c src/transcode.c src/sz_float.c src/sz_double.c \
 	src/sz_int8.c src/sz_int16.c src/sz_int32.c src/sz_int64.c \
 	src/sz_uint8.c src/sz_uint16.c src/sz_uint32.c src/sz_uint64.c \
 	src/szd_uint8.c src/szd_uint16.c src/szd_uint32.c \
@@ -194,6 +194,7 @@ am__dirstamp = $(am__leading_dot)dirstamp
 @FORTRAN_FALSE@	src/libSZ_la-DynamicFloatArray.lo \
 @FORTRAN_FALSE@	src/libSZ_la-VarSet.lo src/libSZ_la-callZlib.lo \
 @FORTRAN_FALSE@	src/libSZ_la-Huffman.lo \
+@FORTRAN_FALSE@	src/libSZ_la-transcode.lo \
 @FORTRAN_FALSE@	src/libSZ_la-sz_float.lo \
 @FORTRAN_FALSE@	src/libSZ_la-sz_double.lo \
 @FORTRAN_FALSE@	src/libSZ_la-sz_int8.lo \
@@ -243,6 +244,7 @@ am__dirstamp = $(am__leading_dot)dirstamp
 @FORTRAN_TRUE@	src/libSZ_la-DynamicFloatArray.lo \
 @FORTRAN_TRUE@	src/libSZ_la-VarSet.lo src/libSZ_la-callZlib.lo \
 @FORTRAN_TRUE@	src/libSZ_la-Huffman.lo src/libSZ_la-sz_float.lo \
+@FORTRAN_TRUE@	src/libSZ_la-transcode.lo \
 @FORTRAN_TRUE@	src/libSZ_la-sz_double.lo \
 @FORTRAN_TRUE@	src/libSZ_la-sz_int8.lo src/libSZ_la-sz_int16.lo \
 @FORTRAN_TRUE@	src/libSZ_la-sz_int32.lo \
@@ -297,6 +299,7 @@ am__depfiles_remade = src/$(DEPDIR)/libSZ_la-ArithmeticCoding.Plo \
 	src/$(DEPDIR)/libSZ_la-DynamicFloatArray.Plo \
 	src/$(DEPDIR)/libSZ_la-DynamicIntArray.Plo \
 	src/$(DEPDIR)/libSZ_la-Huffman.Plo \
+	src/$(DEPDIR)/libSZ_la-transcode.Plo \
 	src/$(DEPDIR)/libSZ_la-MultiLevelCacheTable.Plo \
 	src/$(DEPDIR)/libSZ_la-MultiLevelCacheTableWideInterval.Plo \
 	src/$(DEPDIR)/libSZ_la-TightDataPointStorageD.Plo \
@@ -399,7 +402,7 @@ am__include_HEADERS_DIST = include/MultiLevelCacheTable.h \
 	include/CompressElement.h include/DynamicDoubleArray.h \
 	include/rw.h include/conf.h include/dataCompression.h \
 	include/dictionary.h include/DynamicFloatArray.h \
-	include/VarSet.h include/sz.h include/Huffman.h \
+	include/VarSet.h include/sz.h include/Huffman.h include/transcode.h \
 	include/ByteToolkit.h include/sz_float.h include/sz_double.h \
 	include/callZlib.h include/iniparser.h include/TypeManager.h \
 	include/sz_int8.h include/sz_int16.h include/sz_int32.h \
@@ -575,7 +578,7 @@ top_srcdir = @top_srcdir@
 AUTOMAKE_OPTIONS = foreign
 @FORTRAN_FALSE@include_HEADERS = include/MultiLevelCacheTable.h include/MultiLevelCacheTableWideInterval.h include/CacheTable.h include/defines.h\
 @FORTRAN_FALSE@		include/CompressElement.h include/DynamicDoubleArray.h include/rw.h include/conf.h include/dataCompression.h\
-@FORTRAN_FALSE@		include/dictionary.h include/DynamicFloatArray.h include/VarSet.h include/sz.h include/Huffman.h include/ByteToolkit.h\
+@FORTRAN_FALSE@		include/dictionary.h include/DynamicFloatArray.h include/VarSet.h include/sz.h include/Huffman.h include/transcode.h include/ByteToolkit.h\
 @FORTRAN_FALSE@		include/sz_float.h include/sz_double.h include/callZlib.h include/iniparser.h include/TypeManager.h\
 @FORTRAN_FALSE@		include/sz_int8.h include/sz_int16.h include/sz_int32.h include/sz_int64.h include/szd_int8.h include/szd_int16.h include/szd_int32.h include/szd_int64.h\
 @FORTRAN_FALSE@		include/sz_uint8.h include/sz_uint16.h include/sz_uint32.h include/sz_uint64.h include/szd_uint8.h include/szd_uint16.h include/szd_uint32.h include/szd_uint64.h\
@@ -586,7 +589,7 @@ AUTOMAKE_OPTIONS = foreign
 
 @FORTRAN_TRUE@include_HEADERS = include/MultiLevelCacheTable.h include/MultiLevelCacheTableWideInterval.h include/CacheTable.h include/defines.h\
 @FORTRAN_TRUE@		include/CompressElement.h include/DynamicDoubleArray.h include/rw.h include/conf.h include/dataCompression.h\
-@FORTRAN_TRUE@		include/dictionary.h include/DynamicFloatArray.h include/VarSet.h include/sz.h include/Huffman.h include/ByteToolkit.h include/szf.h\
+@FORTRAN_TRUE@		include/dictionary.h include/DynamicFloatArray.h include/VarSet.h include/sz.h include/Huffman.h include/transcode.h include/ByteToolkit.h include/szf.h\
 @FORTRAN_TRUE@		include/sz_float.h include/sz_double.h include/callZlib.h include/iniparser.h include/TypeManager.h\
 @FORTRAN_TRUE@		include/sz_int8.h include/sz_int16.h include/sz_int32.h include/sz_int64.h include/szd_int8.h include/szd_int16.h include/szd_int32.h include/szd_int64.h\
 @FORTRAN_TRUE@		include/sz_uint8.h include/sz_uint16.h include/sz_uint32.h include/sz_uint64.h include/szd_uint8.h include/szd_uint16.h include/szd_uint32.h include/szd_uint64.h\
@@ -619,7 +622,7 @@ AUTOMAKE_OPTIONS = foreign
 @FORTRAN_FALSE@	src/TightDataPointStorageF.c src/conf.c \
 @FORTRAN_FALSE@	src/DynamicDoubleArray.c src/TypeManager.c \
 @FORTRAN_FALSE@	src/dictionary.c src/DynamicFloatArray.c \
-@FORTRAN_FALSE@	src/VarSet.c src/callZlib.c src/Huffman.c \
+@FORTRAN_FALSE@	src/VarSet.c src/callZlib.c src/Huffman.c src/transcode.c\
 @FORTRAN_FALSE@	src/sz_float.c src/sz_double.c src/sz_int8.c \
 @FORTRAN_FALSE@	src/sz_int16.c src/sz_int32.c src/sz_int64.c \
 @FORTRAN_FALSE@	src/sz_uint8.c src/sz_uint16.c src/sz_uint32.c \
@@ -646,7 +649,7 @@ AUTOMAKE_OPTIONS = foreign
 @FORTRAN_TRUE@	src/DynamicDoubleArray.c src/rwf.c \
 @FORTRAN_TRUE@	src/TypeManager.c src/dictionary.c \
 @FORTRAN_TRUE@	src/DynamicFloatArray.c src/VarSet.c \
-@FORTRAN_TRUE@	src/callZlib.c src/Huffman.c src/sz_float.c \
+@FORTRAN_TRUE@	src/callZlib.c src/Huffman.c src/transcode.c src/sz_float.c \
 @FORTRAN_TRUE@	src/sz_double.c src/sz_int8.c src/sz_int16.c \
 @FORTRAN_TRUE@	src/sz_int32.c src/sz_int64.c src/sz_uint8.c \
 @FORTRAN_TRUE@	src/sz_uint16.c src/sz_uint32.c src/sz_uint64.c \
@@ -777,6 +780,8 @@ src/libSZ_la-callZlib.lo: src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
 src/libSZ_la-Huffman.lo: src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
+src/libSZ_la-transcode.lo: src/$(am__dirstamp) \
+	src/$(DEPDIR)/$(am__dirstamp)
 src/libSZ_la-sz_float.lo: src/$(am__dirstamp) \
 	src/$(DEPDIR)/$(am__dirstamp)
 src/libSZ_la-sz_double.lo: src/$(am__dirstamp) \
@@ -871,6 +876,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/libSZ_la-DynamicFloatArray.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/libSZ_la-DynamicIntArray.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/libSZ_la-Huffman.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/libSZ_la-transcode.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/libSZ_la-MultiLevelCacheTable.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/libSZ_la-MultiLevelCacheTableWideInterval.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@src/$(DEPDIR)/libSZ_la-TightDataPointStorageD.Plo@am__quote@ # am--include-marker
@@ -1106,6 +1112,13 @@ src/libSZ_la-Huffman.lo: src/Huffman.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src/Huffman.c' object='src/libSZ_la-Huffman.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libSZ_la_CFLAGS) $(CFLAGS) -c -o src/libSZ_la-Huffman.lo `test -f 'src/Huffman.c' || echo '$(srcdir)/'`src/Huffman.c
+
+src/libSZ_la-transcode.lo: src/transcode.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libSZ_la_CFLAGS) $(CFLAGS) -MT src/libSZ_la-Huffman.lo -MD -MP -MF src/$(DEPDIR)/libSZ_la-transcode.Tpo -c -o src/libSZ_la-transcode.lo `test -f 'src/transcode.c' || echo '$(srcdir)/'`src/transcode.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) src/$(DEPDIR)/libSZ_la-transcode.Tpo src/$(DEPDIR)/libSZ_la-transcode.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src/transcode.c' object='src/libSZ_la-transcode.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libSZ_la_CFLAGS) $(CFLAGS) -c -o src/libSZ_la-transcode.lo `test -f 'src/transcode.c' || echo '$(srcdir)/'`src/transcode.c
 
 src/libSZ_la-sz_float.lo: src/sz_float.c
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libSZ_la_CFLAGS) $(CFLAGS) -MT src/libSZ_la-sz_float.lo -MD -MP -MF src/$(DEPDIR)/libSZ_la-sz_float.Tpo -c -o src/libSZ_la-sz_float.lo `test -f 'src/sz_float.c' || echo '$(srcdir)/'`src/sz_float.c
@@ -1533,6 +1546,7 @@ distclean: distclean-am
 	-rm -f src/$(DEPDIR)/libSZ_la-DynamicFloatArray.Plo
 	-rm -f src/$(DEPDIR)/libSZ_la-DynamicIntArray.Plo
 	-rm -f src/$(DEPDIR)/libSZ_la-Huffman.Plo
+	-rm -f src/$(DEPDIR)/libSZ_la-transcode.Plo
 	-rm -f src/$(DEPDIR)/libSZ_la-MultiLevelCacheTable.Plo
 	-rm -f src/$(DEPDIR)/libSZ_la-MultiLevelCacheTableWideInterval.Plo
 	-rm -f src/$(DEPDIR)/libSZ_la-TightDataPointStorageD.Plo
@@ -1636,6 +1650,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f src/$(DEPDIR)/libSZ_la-DynamicFloatArray.Plo
 	-rm -f src/$(DEPDIR)/libSZ_la-DynamicIntArray.Plo
 	-rm -f src/$(DEPDIR)/libSZ_la-Huffman.Plo
+	-rm -f src/$(DEPDIR)/libSZ_la-transcode.Plo
 	-rm -f src/$(DEPDIR)/libSZ_la-MultiLevelCacheTable.Plo
 	-rm -f src/$(DEPDIR)/libSZ_la-MultiLevelCacheTableWideInterval.Plo
 	-rm -f src/$(DEPDIR)/libSZ_la-TightDataPointStorageD.Plo

@@ -20,7 +20,5 @@ stamp-h1
 libtool
 config*
 example/sz
-zlib/Makefile
-zstd/Makefile
-example/Makefile
-/Makefile
+Makefile
+.vscode
