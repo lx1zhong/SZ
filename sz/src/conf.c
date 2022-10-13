@@ -111,6 +111,7 @@ int SZ_ReadConf(const char* sz_cfgFile) {
 		confparams_cpr->predThreshold = 0.99;
 		confparams_cpr->sampleDistance = 100;
 
+		confparams_cpr->entropy_type = 0;
 		confparams_cpr->szMode = SZ_BEST_COMPRESSION; //SZ_BEST_SPEED;
 		confparams_cpr->losslessCompressor = ZSTD_COMPRESSOR; //other option: GZIP_COMPRESSOR;
 		if(confparams_cpr->losslessCompressor==ZSTD_COMPRESSOR)
@@ -309,6 +310,26 @@ int SZ_ReadConf(const char* sz_cfgFile) {
 
 		//TODO
 		confparams_cpr->snapshotCmprStep = (int)iniparser_getint(ini, "PARAMETER:snapshotCmprStep", 5);
+
+		int entropy_type = iniparser_getint(ini, "PARAMETER:entropy_type", 0);
+		if(entropy_type < 0 || entropy_type > 2)
+		{
+			printf("[SZ] Error: Wrong entropy_type setting (please check sz.config file)\n");
+			iniparser_freedict(ini);
+			return SZ_NSCS;
+		}
+		else
+			confparams_cpr->entropy_type = entropy_type;
+
+		int prediction = iniparser_getint(ini, "PARAMETER:prediction", 0);
+		if(prediction < 0 || prediction > 1)
+		{
+			printf("[SZ] Error: Wrong prediction setting (please check sz.config file)\n");
+			iniparser_freedict(ini);
+			return SZ_NSCS;
+		}
+		else
+			confparams_cpr->prediction = prediction;
 
 		errBoundMode = iniparser_getstring(ini, "PARAMETER:errorBoundMode", NULL);
 		if(errBoundMode==NULL)

@@ -39,8 +39,8 @@ void usage()
 	printf("	-p: print meta data (configuration info)\n");
 	printf("	-h: print the help information\n");
 	printf("	-v: print the version number\n");	
-	printf("	-g: <n>: choose strategy to compress quantification factor. '0' for huffman (default), '1' for zstd and '2' for fse.\n");
-	printf("	-e: give a expected compression ratio of current file quickly and do not compress the entire file.\n");
+	printf("	-g: <n>: choose strategy to compress quantization factor. '0' for huffman (default), '1' for zstd and '2' for adt-fse.\n");
+	printf("	-e: give a expected compression ratio of current file quickly and do not compress the entire file. 1D and 2D supported.\n");
 	printf("* data type:\n");
 	printf("	-f: single precision (float type)\n");
 	printf("	-d: double precision (double type)\n");
