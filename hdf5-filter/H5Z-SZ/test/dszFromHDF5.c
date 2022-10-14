@@ -17,9 +17,29 @@
 
 #define DATASET "testdata_compressed"
 #define MAX_CHUNK_SIZE 4294967295 //2^32-1
+#include <sys/time.h>
+
+struct timeval Start4; /*only used for recording the cost*/
+double huffCost4 = 0;
+
+void huff_cost_start4()
+{
+	huffCost4 = 0;
+	gettimeofday(&Start4, NULL);
+}
+
+void huff_cost_end4()
+{
+	double elapsed;
+	struct timeval costEnd;
+	gettimeofday(&costEnd, NULL);
+	elapsed = ((costEnd.tv_sec*1000000+costEnd.tv_usec)-(Start4.tv_sec*1000000+Start4.tv_usec))/1000000.0;
+	huffCost4 += elapsed;
+}
 
 int main(int argc, char * argv[])
 {
+	huff_cost_start4();
 	int dimSize = 0;
 	size_t r5=0,r4=0,r3=0,r2=0,r1=0,nbEle = 0;
 	char hdf5FilePath[640], outputFilePath[640];
@@ -259,6 +279,8 @@ int main(int argc, char * argv[])
 		printf("Error: H5Z-SZ supports only float, double or integers.\n");
 		exit(0);
 	}
+	huff_cost_end4();
+	printf("decompress time = %f s\n", huffCost4);
 	
 	status = H5Pclose(dcpl);
 	status = H5Dclose(dset);

@@ -41,6 +41,24 @@ void huff_cost_end4()
 }
 #endif
 
+struct timeval Start14; /*only used for recording the cost*/
+double huffCost14 = 0;
+
+void huff_cost_start14()
+{
+	huffCost14 = 0;
+	gettimeofday(&Start14, NULL);
+}
+
+void huff_cost_end14()
+{
+	double elapsed;
+	struct timeval costEnd;
+	gettimeofday(&costEnd, NULL);
+	elapsed = ((costEnd.tv_sec*1000000+costEnd.tv_usec)-(Start14.tv_sec*1000000+Start14.tv_usec))/1000000.0;
+	huffCost14 += elapsed;
+}
+
 /**
  * 
  * int compressionType: 1 (time-based compression) ; 0 (space-based compression)
@@ -51,6 +69,7 @@ void huff_cost_end4()
 int SZ_decompress_args_float(float** newData, size_t r5, size_t r4, size_t r3, size_t r2, size_t r1, unsigned char* cmpBytes, 
 size_t cmpSize, int compressionType, float* hist_data)
 {
+	huff_cost_start14();
 	int status = SZ_SCES;
 	size_t dataLength = computeDataLength(r5,r4,r3,r2,r1);
 	
@@ -79,7 +98,10 @@ size_t cmpSize, int compressionType, float* hist_data)
 		{
 			if(targetUncompressSize<MIN_ZLIB_DEC_ALLOMEM_BYTES) //Considering the minimum size
 				targetUncompressSize = MIN_ZLIB_DEC_ALLOMEM_BYTES; 
+			// huff_cost_start4();
 			tmpSize = sz_lossless_decompress(confparams_dec->losslessCompressor, cmpBytes, (unsigned long)cmpSize, &szTmpBytes, (unsigned long)targetUncompressSize+4+MetaDataByteLength+exe_params->SZ_SIZE_TYPE);//		(unsigned long)targetUncompressSize+8: consider the total length under lossless compression mode is actually 3+4+1+targetUncompressSize
+			// huff_cost_end4();
+			// printf("[zstd]: time=%f\n", huffCost4);
 			//szTmpBytes = (unsigned char*)malloc(sizeof(unsigned char)*tmpSize);
 			//memcpy(szTmpBytes, tmpBytes, tmpSize);
 			//free(tmpBytes); //release useless memory		
@@ -182,6 +204,9 @@ size_t cmpSize, int compressionType, float* hist_data)
 	free_TightDataPointStorageF2(tdps);
 	if(confparams_dec->szMode!=SZ_BEST_SPEED && cmpSize!=8+MetaDataByteLength+exe_params->SZ_SIZE_TYPE)
 		free(szTmpBytes);
+		
+	huff_cost_end14();
+    // printf("[sz]: time=%f\n", huffCost14);
 	return status;
 }
 
@@ -228,7 +253,7 @@ void decompressDataSeries_float_1D(float** data, size_t dataSeriesLength, float*
     printf("[decoder]: time=%f\n", huffCost4);
 
 #endif
-
+	// huff_cost_start4();
 
 	unsigned char preBytes[4];
 	unsigned char curBytes[4];
@@ -298,7 +323,9 @@ void decompressDataSeries_float_1D(float** data, size_t dataSeriesLength, float*
 		}
 		//printf("%.30G\n",(*data)[i]);
 	}
-	
+	// huff_cost_end4();
+    // printf("[predictor]: time=%f\n", huffCost4);
+
 #ifdef HAVE_TIMECMPR	
 	if(confparams_dec->szMode == SZ_TEMPORAL_COMPRESSION)
 		memcpy(hist_data, (*data), dataSeriesLength*sizeof(float));

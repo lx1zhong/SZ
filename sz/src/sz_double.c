@@ -288,7 +288,7 @@ size_t dataLength, double realPrecision, double valueRangeSize, double medianVal
 	if(confparams_cpr->szMode == SZ_TEMPORAL_COMPRESSION)
 		decData = (double*)(multisteps->hist_data);
 #endif
-
+	// huff_cost_start6();
 	unsigned int quantization_intervals;
 	if(exe_params->optQuantMode==1)
 		quantization_intervals = optimize_intervals_double_1D_opt(oriData, dataLength, realPrecision);
@@ -406,6 +406,8 @@ size_t dataLength, double realPrecision, double valueRangeSize, double medianVal
 
 	size_t exactDataNum = exactLeadNumArray->size;
 
+	// huff_cost_end6();
+	// printf("[predictor]: time=%f\n", huffCost6);
 	TightDataPointStorageD* tdps;
 
 	new_TightDataPointStorageD(&tdps, dataLength, exactDataNum,
@@ -2545,6 +2547,7 @@ int SZ_compress_args_double(int cmprType, int withRegression, unsigned char** ne
 size_t r5, size_t r4, size_t r3, size_t r2, size_t r1, size_t *outSize,
 int errBoundMode, double absErr_Bound, double relBoundRatio, double pwRelBoundRatio)
 {
+	size_t oriSize = 0;
 	confparams_cpr->dataType = SZ_DOUBLE;
 	confparams_cpr->errorBoundMode = errBoundMode;
 	if(errBoundMode==PW_REL)
@@ -2618,6 +2621,55 @@ int errBoundMode, double absErr_Bound, double relBoundRatio, double pwRelBoundRa
 		unsigned char* tmpByteData;
 		if (r2==0)
 		{
+			oriSize = r1 * sizeof(double);
+			// 2D
+			// sample
+			if (confparams_cpr->prediction) {
+				size_t distance_x = 20;
+				size_t block_size = 128;
+				size_t block_num_x;
+
+				block_num_x = r1 / block_size;
+				// printf("block_num_x=%lu\n",block_num_x);
+
+				// size_t num_blocks = block_num_x;
+				// printf("num_blocks=%lu\n",num_blocks);
+
+				size_t sample_block_num_x;
+				sample_block_num_x = block_num_x / distance_x;
+				if (block_num_x % distance_x != 0) sample_block_num_x += 1;
+				// printf("sample_block_num_x=%lu\n",sample_block_num_x);
+
+				size_t r1_ = sample_block_num_x * block_size; //new r1
+				// printf("r1_=%lu,r2_=%lu\n",r1_,r2_);
+				oriSize = r1_ * sizeof(double);
+
+				size_t block_x;
+				size_t sample_offset_x;
+				size_t offset_x;
+				size_t offset, sample_offset;
+
+				double *oriData_ = (double *)malloc(sizeof(double)*r1_);
+				for(size_t i=0; i<sample_block_num_x; i++){
+					// printf("i=%lu,j=%lu\n",i,j);
+					sample_offset_x = i*block_size;
+					// printf("sample_offset_x=%lu,sample_offset_y=%lu\n",sample_offset_x,sample_offset_y);
+					
+					block_x = i * distance_x;
+					// printf("block_x=%lu,block_y=%lu\n",block_x,block_y);
+					offset_x = block_x * block_size;
+
+					for(int x=0; x<block_size; x++){
+						sample_offset = (sample_offset_x + x);
+						offset = (offset_x + x);
+						// printf("sample_offset=%lu,offset=%lu\n",sample_offset,offset);
+						oriData_[sample_offset] = oriData[offset];
+					}
+					
+				}
+				r1 = r1_;
+				oriData = oriData_;
+			}
 			if(confparams_cpr->errorBoundMode>=PW_REL)
 			{
 				if(confparams_cpr->accelerate_pw_rel_compression && confparams_cpr->maxRangeRadius <= 32768)
@@ -2641,6 +2693,83 @@ int errBoundMode, double absErr_Bound, double relBoundRatio, double pwRelBoundRa
 		else
 		if (r3==0)
 		{
+			oriSize = r1 * r2 * sizeof(double);
+			// 2D
+			// sample
+			if (confparams_cpr->prediction) {
+				// size_t distance_x = 4, distance_y= 5;
+				// size_t block_size_x = 108;
+				// size_t block_size_y = 64;
+				size_t distance_x = 4, distance_y= 5;
+				// size_t block_size_x = 32;
+				// size_t block_size_y = 64;
+				size_t block_size_x = r1/distance_x/10;
+				size_t block_size_y = 128;
+				size_t block_num_x, block_num_y;
+
+				block_num_x = r1 / block_size_x;
+				printf("block_num_x=%lu\n",block_num_x);
+				block_num_y = r2 / block_size_y;
+				printf("block_num_y=%lu\n",block_num_y);
+
+				// size_t num_blocks = block_num_x * block_num_y;
+				// printf("num_blocks=%lu\n",num_blocks);
+
+				size_t sample_block_num_x, sample_block_num_y;
+				sample_block_num_x = block_num_x / distance_x;
+				// if (block_num_x % distance_x != 0) sample_block_num_x += 1;
+				printf("sample_block_num_x=%lu\n",sample_block_num_x);
+
+				sample_block_num_y = block_num_y / distance_y;
+				// if (block_num_y % distance_y != 0) sample_block_num_y += 1;
+				printf("sample_block_num_y=%lu\n",sample_block_num_y);
+
+				size_t r1_ = sample_block_num_x * block_size_x; //new r1
+				size_t r2_ = sample_block_num_y * block_size_y; //new r2
+				printf("r1_=%lu,r2_=%lu\n",r1_,r2_);
+				oriSize = r1_ * r2_ * sizeof(double);
+
+				size_t block_x, block_y;
+				size_t sample_offset_x, sample_offset_y;
+				size_t offset_x, offset_y;
+				size_t offset, sample_offset;
+
+				double *oriData_ = (double *)malloc(sizeof(double)*r1_*r2_);
+				for(size_t i=0; i<sample_block_num_x; i++){
+					for(size_t j=0; j<sample_block_num_y; j++){
+						// printf("i=%lu,j=%lu\n",i,j);
+						sample_offset_x = i*block_size_x;
+						sample_offset_y = j*block_size_y;
+						// printf("sample_offset_x=%lu,sample_offset_y=%lu\n",sample_offset_x,sample_offset_y);
+						
+						srand((unsigned)time(NULL));
+						int r=rand() % distance_x;
+						r=0;
+						block_x = i * distance_x + r;
+						srand((unsigned)time(NULL));
+						r=rand() % distance_y;
+						r=0;
+						block_y = j * distance_y + r;
+						// printf("block_x=%lu,block_y=%lu\n",block_x,block_y);
+						offset_x = block_x * block_size_x;
+						offset_y = block_y * block_size_y;
+
+						for(int y=0; y<block_size_y; y++){
+							size_t sample_base = sample_offset_x + (sample_offset_y + y) * r1_;
+							size_t base = offset_x + (offset_y + y) * r1;
+							for(int x=0; x<block_size_x; x++){
+								sample_offset = (x) + sample_base;
+								offset = (x) + base;
+								// printf("sample_offset=%lu,offset=%lu\n",sample_offset,offset);
+								oriData_[sample_offset] = oriData[offset];
+							}
+						}
+					}
+				}
+				r1 = r1_;
+				r2 = r2_;
+				oriData = oriData_;
+			}
 			if(confparams_cpr->errorBoundMode>=PW_REL)
 			{
 				if(confparams_cpr->accelerate_pw_rel_compression && confparams_cpr->maxRangeRadius <= 32768)
@@ -2736,8 +2865,16 @@ int errBoundMode, double absErr_Bound, double relBoundRatio, double pwRelBoundRa
 		}
 		else if(confparams_cpr->szMode==SZ_BEST_COMPRESSION || confparams_cpr->szMode==SZ_DEFAULT_COMPRESSION || confparams_cpr->szMode==SZ_TEMPORAL_COMPRESSION)
 		{
+			// huff_cost_start6();
 			*outSize = sz_lossless_compress(confparams_cpr->losslessCompressor, confparams_cpr->gzipMode, tmpByteData, tmpOutSize, newByteData);
+			// huff_cost_end6();
+    		// printf("[zstd_]: time=%f\n", huffCost6);
 			free(tmpByteData);
+			if (confparams_cpr->prediction) {
+				printf("oriSize=%lu, outSize=%lu.\n", oriSize, *outSize);
+				float pred_ratio = (float)oriSize/(float)(*outSize);
+				printf("[prediction]: expecting compression ratio=%f.\n", pred_ratio);
+			}
 		}
 		else
 		{

@@ -9,8 +9,8 @@
 ##   PLEASE SET THESE VARIABLES BEFORE COMPILING
 ##=======================================================================
 
-SZPATH		= /home/sdi/Install/sz-2.1.12-install
-HDF5PATH	= /home/sdi/Install/hdf5-1.10.3-install
+SZPATH		= /home/zhongyu/sz/sz2
+HDF5PATH	= /usr/lib/x86_64-linux-gnu/hdf5/serial
 
 ##=======================================================================
 ##   DIRECTORY TREE
@@ -32,7 +32,8 @@ MPICC 		= mpicc
 ##   FLAGS
 ##=======================================================================
 
-SZFLAGS         = -I$(SZPATH)/include -L$(SZPATH)/lib -Wl,-rpath,$(SZPATH)/lib
+# SZFLAGS         = -I$(SZPATH)/include -L$(SZPATH)/lib -Wl,-rpath,$(SZPATH)/lib
+SZFLAGS		= -I$(SZPATH)/include -I/home/zhongyu/sz/SZ/hdf5-filter/H5Z-SZ/include -I/home/zhongyu/sz/SZ -L$(SZPATH)/lib -Wl,-rpath,$(SZPATH)/lib 
 
 HDF5FLAGS	= -I$(HDF5PATH)/include #$(HDF5PATH)/lib/libhdf5.a
 

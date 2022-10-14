@@ -72,10 +72,13 @@ size_t cmpSize, int compressionType, double* hist_data)
 		{
 			if(targetUncompressSize<MIN_ZLIB_DEC_ALLOMEM_BYTES) //Considering the minimum size
 				targetUncompressSize = MIN_ZLIB_DEC_ALLOMEM_BYTES; 			
+			// huff_cost_start8();
 			tmpSize = sz_lossless_decompress(confparams_dec->losslessCompressor, cmpBytes, (unsigned long)cmpSize, &szTmpBytes, (unsigned long)targetUncompressSize+4+MetaDataByteLength_double+exe_params->SZ_SIZE_TYPE);			
 			//szTmpBytes = (unsigned char*)malloc(sizeof(unsigned char)*tmpSize);
 			//memcpy(szTmpBytes, tmpBytes, tmpSize);
 			//free(tmpBytes); //release useless memory		
+			// huff_cost_end8();
+			// printf("[zstd]: time=%f\n", huffCost8);
 		}
 		else
 		{
@@ -218,7 +221,7 @@ void decompressDataSeries_double_1D(double** data, size_t dataSeriesLength, doub
     printf("[decoder]: time=%f\n", huffCost8);
 
 #endif
-	
+	// huff_cost_start8();
 	unsigned char preBytes[8];
 	unsigned char curBytes[8];
 	
@@ -287,6 +290,9 @@ void decompressDataSeries_double_1D(double** data, size_t dataSeriesLength, doub
 		}
 		//printf("%.30G\n",(*data)[i]);
 	}
+	// huff_cost_end8();
+    // printf("[cal]: time=%f\n", huffCost8);
+
 	
 #ifdef HAVE_TIMECMPR	
 	if(confparams_dec->szMode == SZ_TEMPORAL_COMPRESSION)

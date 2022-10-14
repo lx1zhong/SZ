@@ -16,8 +16,29 @@
 
 #define DATASET "testdata_compressed"
 
+#include <sys/time.h>
+
+struct timeval Start4; /*only used for recording the cost*/
+double huffCost4 = 0;
+
+void huff_cost_start4()
+{
+	huffCost4 = 0;
+	gettimeofday(&Start4, NULL);
+}
+
+void huff_cost_end4()
+{
+	double elapsed;
+	struct timeval costEnd;
+	gettimeofday(&costEnd, NULL);
+	elapsed = ((costEnd.tv_sec*1000000+costEnd.tv_usec)-(Start4.tv_sec*1000000+Start4.tv_usec))/1000000.0;
+	huffCost4 += elapsed;
+}
+
 int main(int argc, char * argv[])
 {
+    huff_cost_start4();
 	size_t r5=0,r4=0,r3=0,r2=0,r1=0;
 	char outDir[640], oriFilePath[640], outputFilePath[640];
 	size_t cd_nelmts, nbEle; 
@@ -131,7 +152,6 @@ int main(int argc, char * argv[])
 			printf("sz filter is available for encoding and decoding.\n");
 	}
 	if (0 > H5Pset_chunk(cpid, dim, chunk)) ERROR(H5Pset_chunk);
-
 	//Initialize the configuration for SZ
 	//You can also use the global variable conf_params to set the configuratoin for sz without cfgFile.
 	//Example of setting an absolute error bound:
@@ -154,6 +174,7 @@ int main(int argc, char * argv[])
 
 		if(dataEndianType == LITTLE_ENDIAN_DATA)
 		{
+			///////////////////////////
 			if (0 > (idsid = H5Dcreate(fid, DATASET, H5T_IEEE_F32LE, sid, H5P_DEFAULT, cpid, H5P_DEFAULT))) ERROR(H5Dcreate);
 			if (0 > H5Dwrite(idsid, H5T_IEEE_F32LE, H5S_ALL, H5S_ALL, H5P_DEFAULT, data)) ERROR(H5Dwrite);			
 		}
@@ -375,6 +396,8 @@ int main(int argc, char * argv[])
 	if (0 > H5Fclose(fid)) ERROR(H5Fclose);
 	free(cd_values);
 	printf("Output hdf5 file: %s\n", outputFilePath);
+	huff_cost_end4();
+	printf("compress time = %f s\n", huffCost4);
 	H5Z_SZ_Finalize();
 	H5close();
 	return 0;

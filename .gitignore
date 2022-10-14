@@ -22,3 +22,5 @@ config*
 example/sz
 Makefile
 .vscode
+*.h5
+*HDF5

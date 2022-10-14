@@ -1,3 +1,11 @@
+FSE-ADT: A New Encoder for SZ
+
+Usage:
+1. use "-g <n>" for strategy selection. 0 for huffman(default), 1 for Zstd and 2 for adt-fse(our-solution). "entropy_type=<n>" in sz.config is also surported.
+2. use "-e" to get the prediction of compression ratio of the file. "prodiction=1" in sz.config is also surported. 1D and 2D files surported by now.
+
+
+---------------------------------------------------
 SZ2: Error-bounded Lossy Compressor for HPC Data
 =====
  (C) 2016-2022 by Mathematics and Computer Science (MCS), Argonne National Laboratory.

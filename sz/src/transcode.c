@@ -48,8 +48,6 @@ void huff_cost_end3()
 void encode_with_fse(int *type, size_t dataSeriesLength, unsigned int intervals, 
                     unsigned char **FseCode, size_t *FseCode_size, 
                     unsigned char **transCodeBits, size_t *transCodeBits_size) {
-    // int max_type=0, min_type=0;
-    // int diff;
 
     // int *type_ = (int*)malloc(dataSeriesLength*sizeof(int));
     // memcpy(type_, type, dataSeriesLength*sizeof(int));
@@ -61,7 +59,6 @@ void encode_with_fse(int *type, size_t dataSeriesLength, unsigned int intervals,
 
     // transcoding results of type array
     uint8_t *tp_code = (uint8_t *)malloc(dataSeriesLength);
-    // uint8_t tp_code[dataSeriesLength];           // 数值太大时，初始化数组会失败(why?)
     int nbits;
 
     BIT_CStream_t transCodeStream;
@@ -73,10 +70,9 @@ void encode_with_fse(int *type, size_t dataSeriesLength, unsigned int intervals,
 	huff_cost_start3();
 #endif
     // transcoding
-    // printf("intervals=%u\n", intervals);
     int md = intervals/2;
 
-    // 提前初始化数组，尽量精简长循环内的代码
+    // initialize array ahead to minimize the caculation in the long loop
     uint8_t type2code[intervals];
     unsigned int diff[intervals];
     for (int i=md; i<intervals; i++) {
@@ -95,22 +91,18 @@ void encode_with_fse(int *type, size_t dataSeriesLength, unsigned int intervals,
 	huff_cost_start3();
 #endif
 
-    for (int i=0; i<dataSeriesLength; i++) {    // 0.677
-        // if (type[i] > max_type)
-        // 	max_type = type[i];
-        // if (type[i] < min_type)
-        // 	min_type = type[i];
+    for (int i=0; i<dataSeriesLength; i++) {
         if (type[i] == 0) {
             // unpredictable data
             tp_code[i] = TOTAL_CODE_NUM;
             nbits = 0;
         }
         else {
-            tp_code[i] = type2code[type[i]];                                                                      //0.45
+            tp_code[i] = type2code[type[i]];
             nbits = code2int[tp_code[i]][1];
-            BIT_addBitsFast(&transCodeStream, diff[type[i]], nbits);                      //0.03
+            BIT_addBitsFast(&transCodeStream, diff[type[i]], nbits);
             // printf(" %d: type=%d, nbits=%d, tp_code=%d, diff=%d\n", i, type[i], nbits, tp_code[i], diff[type[i]]);
-            BIT_flushBitsFast(&transCodeStream);                                                                 //0.1
+            BIT_flushBitsFast(&transCodeStream);
         }
     }
     
@@ -123,6 +115,8 @@ void encode_with_fse(int *type, size_t dataSeriesLength, unsigned int intervals,
 #endif
 
     (*FseCode) = (unsigned char*)malloc(2 * dataSeriesLength);
+    // size_t fse_size = HUF_compress((*FseCode), 2 * dataSeriesLength, tp_code, dataSeriesLength);
+    // if (HUF_isError(fse_size)) {
     size_t fse_size = FSE_compress((*FseCode), 2 * dataSeriesLength, tp_code, dataSeriesLength);
     if (FSE_isError(fse_size)) {
         printf("encode:FSE_isError!\n");
@@ -148,24 +142,6 @@ void encode_with_fse(int *type, size_t dataSeriesLength, unsigned int intervals,
     // fwrite(type, sizeof(int), dataSeriesLength, f0);
     // fclose(f0);
 
-    // FILE *f1 = fopen("/home/zhongyu/tmp/tp_code.txt","w");
-    // for (int j=0; j<dataSeriesLength; j++) {
-    // 	fprintf(f1, "%d ", (int)tp_code[j]);
-    // }
-    // fclose(f1);
-
-    // FILE *f2 = fopen("/home/zhongyu/tmp/fse.bin","wb");
-    // fwrite((*FseCode), 1, fse_size, f2);
-    // fclose(f2);
-
-    // FILE *f3 = fopen("/home/zhongyu/tmp/transCodeBits.bin","wb");
-    // fwrite((*transCodeBits), 1, streamSize, f3);
-    // fclose(f3);
-
-    // int* type2 = (int*)malloc(dataSeriesLength*sizeof(int));
-    // decode_with_fse((*this), dataSeriesLength, type2);
-    // printf("max_type=%d, min_type=%d\n", max_type, min_type);
-
     free(tp_code);
 }
 
@@ -183,10 +159,12 @@ void decode_with_fse(int *type, size_t dataSeriesLength, unsigned int intervals,
     uint8_t *tp_code = (uint8_t *)malloc(dataSeriesLength);
 
     if (FseCode_size <= 1) {
-        // type都为0
+        // all 0
         memset((void *)type, 0, sizeof(int) * dataSeriesLength);
         return;
     }
+    // size_t fse_size = HUF_decompress(tp_code, dataSeriesLength, FseCode, FseCode_size);
+    // if (HUF_isError(fse_size)) {
     size_t fse_size = FSE_decompress(tp_code, dataSeriesLength, FseCode, FseCode_size);
     if (FSE_isError(fse_size)) {
         printf("decode:FSE_isError!\n");
@@ -210,7 +188,6 @@ void decode_with_fse(int *type, size_t dataSeriesLength, unsigned int intervals,
     }
 
     int md = intervals / 2;
-    // printf("intervals = %u\n", intervals);
 
     int code2type[TOTAL_CODE_NUM];
     for (int i=0; i<TOTAL_CODE_NUM; i++) {
@@ -239,11 +216,11 @@ void decode_with_fse(int *type, size_t dataSeriesLength, unsigned int intervals,
         BIT_reloadDStream(&transCodeStream);
         
         if (tp_code[i] < POSITIVE_CODE_NUM) {
-            // 正数
+            // positve
             type[i] = code2type[tp_code[i]] + diff;
         }
         else{
-            // 负数
+            // negtive
             type[i] = code2type[tp_code[i]] - diff;
         }
 		// printf(" %d:factor=%d, base=%d, nbits=%d, tp_code=%d, diff=%d\n", i, factor, base, nbits, tp_code[i], diff);
@@ -254,10 +231,6 @@ void decode_with_fse(int *type, size_t dataSeriesLength, unsigned int intervals,
     huff_cost_end3();
     printf("[fse-3]: transcode time=%f\n", huffCost3);
 #endif
-    
-    // FILE *f0 = fopen("/home/zhongyu/tmp/type_array2.bin","wb");
-    // fwrite(type, sizeof(int), dataSeriesLength, f0);
-    // fclose(f0);
 
 }
 
