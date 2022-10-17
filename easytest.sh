@@ -1,7 +1,10 @@
 #!/bin/bash
 
+echo "Set \$YOUR_INSTALL_PATH if you use SZ at the first time!"
+YOUR_INSTALL_PATH=#set this
+
 # set sz path
-SZ_PATH=./example/sz
+SZ_PATH=$YOUR_INSTALL_PATH/bin/sz
 
 # set test file
 # for fuctional test only, for more test, you may download SDRBENCH dataset from here: https://sdrbench.github.io/
@@ -15,13 +18,14 @@ PREFIX=A
 ERROR_BOUND=1E-1
 
 # configuration
-# ./configure --prefix=$YOUR_INSTALL_PATH
+# only need to open this when first time you install sz
+./configure --prefix=$YOUR_INSTALL_PATH
 
 # make
-make -j8 >/dev/null   
+make -j8 #>/dev/null   
 
 # installation
-# sudo make install >/dev/null
+sudo make install #>/dev/null
 
 # run
 echo "sz -z -f -g <n> -i $TEST_FILE -M $ERROR_BOUND_MODE -$PREFIX $ERROR_BOUND -$DIM $dims"
