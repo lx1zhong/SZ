@@ -1,65 +1,72 @@
 #!/bin/bash
 
-SZ_PATH=/home/zhongyu/sz/sz2
-TEST_FILE=/home/zhongyu/test/SDRBENCH-EXAALT-2869440-f/vx.dat2
+# set sz path
+SZ_PATH=./example/sz
+
+# set test file
+# for fuctional test only, for more test, you may download SDRBENCH dataset from here: https://sdrbench.github.io/
+TEST_FILE=./example/testdata/x86/testfloat_8_8_128.dat
+DIM=3
+dims="128 8 8"
+
+# set error bound
 ERROR_BOUND_MODE=ABS
-PPP=A
+PREFIX=A
 ERROR_BOUND=1E-1
-DIM=1
-# 
-# 10M
-filesize_set_rows="2869440"
-# for filesize_set_rows in $filesize_set_rows
-# do
-echo $filesize_set_rows
 
-# change path
-# ./configure --prefix=$SZ_PATH
+# configuration
+# ./configure --prefix=$YOUR_INSTALL_PATH
 
+# make
 make -j8 >/dev/null   
 
-sudo make install >/dev/null
+# installation
+# sudo make install >/dev/null
 
-# output=/home/zhongyu/tmp/result.txt
+# run
+echo "sz -z -f -g <n> -i $TEST_FILE -M $ERROR_BOUND_MODE -$PREFIX $ERROR_BOUND -$DIM $dims"
 
-# echo "sz -z -f -g -i $TEST_FILE -M $ERROR_BOUND_MODE -$PPP $ERROR_BOUND -1 $filesize_set_rows"
-# echo "huffman:"
-# echo "---compress---"
-# # echo "sz -z -f -g 0 -i $TEST_FILE -M $ERROR_BOUND_MODE -$PPP $ERROR_BOUND -$DIM $filesize_set_rows"
-# $SZ_PATH"/bin/"sz -z -f -g 0 -i $TEST_FILE -M $ERROR_BOUND_MODE -$PPP $ERROR_BOUND -$DIM $filesize_set_rows #> $output
-# filesize_compressed=`ls -l $TEST_FILE".sz" | awk '{print $5}'`
-# echo "$filesize_compressed"
-
-# echo "---decompress---"
-# # # echo "$SZ_PATH"/bin/"sz -x -f -s $TEST_FILE.sz -1 $filesize_set_rows"
-# $SZ_PATH"/bin/"sz -x -f -s $TEST_FILE.sz -$DIM $filesize_set_rows #>> $output
-
-# echo "zstd:"
-# echo "---compress---"
-# # echo "$SZ_PATH"/bin/"sz -z -f -g 1 -i $TEST_FILE -M $ERROR_BOUND_MODE -$PPP $ERROR_BOUND -$DIM $filesize_set_rows"
-# $SZ_PATH"/bin/"sz -z -f -g 1 -i $TEST_FILE -M $ERROR_BOUND_MODE -$PPP $ERROR_BOUND -$DIM $filesize_set_rows #> $output
-# filesize_compressed=`ls -l $TEST_FILE".sz" | awk '{print $5}'`
-# echo "$filesize_compressed"
-
-# echo "--decompress---"
-# # echo "$SZ_PATH"/bin/"sz -x -f -s $TEST_FILE.sz -$DIM $filesize_set_rows"
-# $SZ_PATH"/bin/"sz -x -f -s $TEST_FILE.sz -$DIM $filesize_set_rows #>> $output
-
-echo "fse:"
+echo
+echo "Huffman:"
 echo "---compress---"
-echo "$SZ_PATH"/bin/"sz -z -f -g 0 -i $TEST_FILE -M $ERROR_BOUND_MODE -$PPP $ERROR_BOUND -$DIM $filesize_set_rows"
-$SZ_PATH"/bin/"sz -z -f -g 2 -i $TEST_FILE -M $ERROR_BOUND_MODE -$PPP $ERROR_BOUND -$DIM $filesize_set_rows #> $output
+# echo "sz -z -f -g 0 -i $TEST_FILE -M $ERROR_BOUND_MODE -$PREFIX $ERROR_BOUND -$DIM $dims"
+$SZ_PATH -z -f -g 0 -i $TEST_FILE -M $ERROR_BOUND_MODE -$PREFIX $ERROR_BOUND -$DIM $dims
 filesize_compressed=`ls -l $TEST_FILE".sz" | awk '{print $5}'`
 filesize_origin=`ls -l $TEST_FILE | awk '{print $5}'`
-echo "$filesize_compressed"
-echo `echo "scale=6;$filesize_origin/$filesize_compressed" | bc`
+echo compressed bytes: "$filesize_compressed"
+echo compression ratio: `echo "scale=6;$filesize_origin/$filesize_compressed" | bc`
+
+echo "---decompress---"
+# # echo "$SZ_PATH -x -f -s $TEST_FILE.sz -1 $dims"
+$SZ_PATH -x -f -s $TEST_FILE.sz -$DIM $dims #>> $output
+
+echo
+echo "Zstd:"
+echo "---compress---"
+# echo "$SZ_PATH -z -f -g 1 -i $TEST_FILE -M $ERROR_BOUND_MODE -$PREFIX $ERROR_BOUND -$DIM $dims"
+$SZ_PATH -z -f -g 1 -i $TEST_FILE -M $ERROR_BOUND_MODE -$PREFIX $ERROR_BOUND -$DIM $dims
+filesize_compressed=`ls -l $TEST_FILE".sz" | awk '{print $5}'`
+filesize_origin=`ls -l $TEST_FILE | awk '{print $5}'`
+echo compressed bytes: "$filesize_compressed"
+echo compression ratio: `echo "scale=6;$filesize_origin/$filesize_compressed" | bc`
 
 echo "--decompress---"
-echo "$SZ_PATH"/bin/"sz -x -f -s $TEST_FILE.sz -$DIM $filesize_set_rows"
-$SZ_PATH"/bin/"sz -x -f -s $TEST_FILE.sz -$DIM $filesize_set_rows #>> $output
+# echo "$SZ_PATH -x -f -s $TEST_FILE.sz -$DIM $dims"
+$SZ_PATH -x -f -s $TEST_FILE.sz -$DIM $dims #>> $output
+
+echo
+echo "ADT-FSE:"
+echo "---compress---"
+# echo "$SZ_PATH -z -f -g 2 -i $TEST_FILE -M $ERROR_BOUND_MODE -$PREFIX $ERROR_BOUND -$DIM $dims"
+$SZ_PATH -z -f -g 2 -i $TEST_FILE -M $ERROR_BOUND_MODE -$PREFIX $ERROR_BOUND -$DIM $dims
+filesize_compressed=`ls -l $TEST_FILE".sz" | awk '{print $5}'`
+filesize_origin=`ls -l $TEST_FILE | awk '{print $5}'`
+echo compressed bytes: "$filesize_compressed"
+echo compression ratio: `echo "scale=6;$filesize_origin/$filesize_compressed" | bc`
+
+echo "--decompress---"
+# echo "$SZ_PATH -x -f -s $TEST_FILE.sz -$DIM $dims"
+$SZ_PATH -x -f -s $TEST_FILE.sz -$DIM $dims #>> $output
 
 # rm -rf $TEST_FILE.sz $TEST_FILE.sz.out
-
-# /bin/python3 /home/zhongyu/tmp/figure.py
-# done
 
