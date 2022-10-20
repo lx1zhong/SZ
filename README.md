@@ -1,11 +1,12 @@
-# FSE-ADT: A New Encoder for SZ
-
+# ADT-FSE: A New Encoder for SZ
 
 Usage:
 1. use "-g <n>" for strategy selection. 0 for huffman(default), 1 for Zstd and 2 for adt-fse(our-solution). "entropy_type=<n>" in sz.config is also surported.
 2. use "-e" to get the prediction of compression ratio of the file. "prodiction=1" in sz.config is also surported. 1D and 2D files surported by now.
 
-You can do a quick test of *SZ_ADT* by using `./easytest.sh`. Set `$YOUR_INSTALL_PATH` in script first.
+You can do a quick test of *SZ_ADT*(ADT-FSE-enhanced SZ) by using `./easytest.sh`. Set `$YOUR_INSTALL_PATH` in script first.
+
+*ADT-HUFF0* (replace FSE with Canonical Huffman Encoding) will also be supported, which provides slightly lower but similar performance with *ADT-FSE*.
 
 ---------------------------------------------------
 SZ2: Error-bounded Lossy Compressor for HPC Data

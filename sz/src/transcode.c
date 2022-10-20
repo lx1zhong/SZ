@@ -16,29 +16,26 @@
 #ifdef TIMER__
 #include <sys/time.h>
 
-struct timeval Start3; /*only used for recording the cost*/
-double huffCost3 = 0;
+struct timeval time_start; /*only used for recording the cost*/
+double timeCost = 0;
 
 
-void huff_cost_start3()
+void time_cost_start()
 {
-	huffCost3 = 0;
-	gettimeofday(&Start3, NULL);
+	timeCost = 0;
+	gettimeofday(&time_start, NULL);
 }
 
-void huff_cost_end3()
+void time_cost_end()
 {
 	double elapsed;
-	struct timeval costEnd;
-	gettimeofday(&costEnd, NULL);
-	elapsed = ((costEnd.tv_sec*1000000+costEnd.tv_usec)-(Start3.tv_sec*1000000+Start3.tv_usec))/1000000.0;
-	huffCost3 += elapsed;
+	struct timeval time_end;
+	gettimeofday(&time_end, NULL);
+	elapsed = ((time_end.tv_sec*1000000+time_end.tv_usec)-(time_start.tv_sec*1000000+time_start.tv_usec))/1000000.0;
+	timeCost += elapsed;
 }
 #endif
 
-// int comp(const void *a, const void *b) {
-//     return *(int *)a - *(int *)b;
-// }
 
 /**
  * @brief transform type array to FseCode & tranCodeBits
@@ -48,14 +45,6 @@ void huff_cost_end3()
 void encode_with_fse(int *type, size_t dataSeriesLength, unsigned int intervals, 
                     unsigned char **FseCode, size_t *FseCode_size, 
                     unsigned char **transCodeBits, size_t *transCodeBits_size) {
-
-    // int *type_ = (int*)malloc(dataSeriesLength*sizeof(int));
-    // memcpy(type_, type, dataSeriesLength*sizeof(int));
-
-    // qsort(type_, dataSeriesLength, sizeof(int), comp);
-    // int first=0;
-    // while(type_[first]==0) first++;
-    // printf("【type】max=%d, mid=%d, intervals/2=%d\n", type_[dataSeriesLength-1], type_[(dataSeriesLength-first)/2 + first], intervals/2);
 
     // transcoding results of type array
     uint8_t *tp_code = (uint8_t *)malloc(dataSeriesLength);
@@ -67,7 +56,7 @@ void encode_with_fse(int *type, size_t dataSeriesLength, unsigned int intervals,
     BIT_initCStream(&transCodeStream, (*transCodeBits), dstCapacity);
 
 #ifdef TIMER__
-	huff_cost_start3();
+	time_cost_start();
 #endif
     // transcoding
     int md = intervals/2;
@@ -85,10 +74,10 @@ void encode_with_fse(int *type, size_t dataSeriesLength, unsigned int intervals,
     }
 
 #ifdef TIMER__
-    huff_cost_end3();
-    printf("[fse-0]: table time=%f\n", huffCost3);
+    time_cost_end();
+    printf("[adt-fse-0]: table time=%f\n", timeCost);
 
-	huff_cost_start3();
+	time_cost_start();
 #endif
 
     for (int i=0; i<dataSeriesLength; i++) {
@@ -107,14 +96,18 @@ void encode_with_fse(int *type, size_t dataSeriesLength, unsigned int intervals,
     }
     
 #ifdef TIMER__
-    huff_cost_end3();
-    printf("[fse-1]: transcode time=%f\n", huffCost3);
+    time_cost_end();
+    printf("[adt-fse-1]: transcode time=%f\n", timeCost);
     // fse encoding
     
-	huff_cost_start3();
+	time_cost_start();
 #endif
 
+    // FSE
     (*FseCode) = (unsigned char*)malloc(2 * dataSeriesLength);
+    /* ADT-HUFF0: if replace FSE_compress() with HUF_compress() (Canonical Huffman Encoding), 
+       then our scheme becomes ADT-HUFF0, which provides slightly lower but similair performance than ADT-FSE.
+       Remember to enlarge HUF_BLOCKSIZE_MAX in zstd/common/huf.h to enable large-block compression.*/
     // size_t fse_size = HUF_compress((*FseCode), 2 * dataSeriesLength, tp_code, dataSeriesLength);
     // if (HUF_isError(fse_size)) {
     size_t fse_size = FSE_compress((*FseCode), 2 * dataSeriesLength, tp_code, dataSeriesLength);
@@ -134,8 +127,8 @@ void encode_with_fse(int *type, size_t dataSeriesLength, unsigned int intervals,
     }
     
 #ifdef TIMER__
-    huff_cost_end3();
-    printf("[fse-2]: encode time=%f\n", huffCost3);
+    time_cost_end();
+    printf("[adt-fse-2]: fse time=%f\n", timeCost);
 #endif
 
     // FILE *f0 = fopen("/home/zhongyu/tmp/type_array.bin","wb");
@@ -153,16 +146,18 @@ void decode_with_fse(int *type, size_t dataSeriesLength, unsigned int intervals,
                     unsigned char *FseCode, size_t FseCode_size, 
                     unsigned char *transCodeBits, size_t transCodeBits_size) {
 #ifdef TIMER__
-	huff_cost_start3();
+	time_cost_start();
 #endif
 
     uint8_t *tp_code = (uint8_t *)malloc(dataSeriesLength);
 
+    // fse
     if (FseCode_size <= 1) {
         // all 0
         memset((void *)type, 0, sizeof(int) * dataSeriesLength);
         return;
     }
+    /* ADT-HUFF0: there're problems directly calling HUF_decompress() because of decompress size limit.*/
     // size_t fse_size = HUF_decompress(tp_code, dataSeriesLength, FseCode, FseCode_size);
     // if (HUF_isError(fse_size)) {
     size_t fse_size = FSE_decompress(tp_code, dataSeriesLength, FseCode, FseCode_size);
@@ -175,10 +170,10 @@ void decode_with_fse(int *type, size_t dataSeriesLength, unsigned int intervals,
         exit(1);
     }
 #ifdef TIMER__
-    huff_cost_end3();
-    printf("[fse-1]: fse decode time=%f\n", huffCost3);
+    time_cost_end();
+    printf("[adt-fse-0]: fse decode time=%f\n", timeCost);
     
-	huff_cost_start3();
+	time_cost_start();
 #endif
     BIT_DStream_t transCodeStream;
     size_t stream_size = BIT_initDStream(&transCodeStream, transCodeBits, transCodeBits_size);
@@ -194,12 +189,13 @@ void decode_with_fse(int *type, size_t dataSeriesLength, unsigned int intervals,
         code2type[i] = code2int[i][0] + md;
     }
 #ifdef TIMER__
-    huff_cost_end3();
-    printf("[fse-2]: table time=%f\n", huffCost3);
+    time_cost_end();
+    printf("[adt-fse-1]: table time=%f\n", timeCost);
     
-	huff_cost_start3();
+	time_cost_start();
 #endif
 
+    // detranscode
     int nbits;
     size_t diff;
     for (int i=dataSeriesLength-1; i>=0; i--) {
@@ -228,8 +224,8 @@ void decode_with_fse(int *type, size_t dataSeriesLength, unsigned int intervals,
     
     free(tp_code);
 #ifdef TIMER__
-    huff_cost_end3();
-    printf("[fse-3]: transcode time=%f\n", huffCost3);
+    time_cost_end();
+    printf("[adt-fse-2]: transcode time=%f\n", timeCost);
 #endif
 
 }
