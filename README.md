@@ -1,4 +1,4 @@
-# ADT-FSE: A New Encoder for SZ
+# ADT-FSE: A New Encoder for SZ ![](https://zenodo.org/badge/518360590.svg)
 **This paper has been included in SC'23.** 
 Usage:
 1. use "-g <n>" for strategy selection. 0 for huffman(default), 1 for Zstd and 2 for adt-fse(our-solution). "entropy_type=<n>" in sz.config is also surported.
