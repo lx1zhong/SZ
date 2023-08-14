@@ -1,6 +1,21 @@
 # ADT-FSE: A New Encoder for SZ ![](https://zenodo.org/badge/518360590.svg)
-**This paper has been included in SC'23.** 
-Usage:
+**This is the open-source repository for our paper ADT-FSE in SC'23.** 
+
+## Cite our paper
+```
+@inproceedings{adtfse_sc2023,
+author = {Tao Lu, Yu Zhong, Zibin Sun, Xiang Chen, You Zhou, Fei Wu, Ying Yang, Yunxin Huang, and Yafei Yang},
+title = {ADT-FSE: A New Encoder for SZ},
+year = {2023},
+publisher = {IEEE Press},
+booktitle = {Proceedings of the International Conference on High Performance Computing, Networking, Storage and Analysis},
+location = {Denver, Colorado},
+series = {SC'23}
+}
+```
+
+
+## Usage
 1. use "-g <n>" for strategy selection. 0 for huffman(default), 1 for Zstd and 2 for adt-fse(our-solution). "entropy_type=<n>" in sz.config is also surported.
 2. use "-e" to get the prediction of compression ratio of the file. "prodiction=1" in sz.config is also surported. 1D and 2D files surported by now.
 
@@ -8,7 +23,11 @@ You can do a quick test of *SZ_ADT*(ADT-FSE-enhanced SZ) by using `./easytest.sh
 
 *ADT-HUFF0* (replace FSE with Canonical Huffman Encoding) will also be supported, which provides slightly lower but similar performance with *ADT-FSE*.
 
+
+
 ---------------------------------------------------
+# SZ INTRODUCTION
+
 SZ2: Error-bounded Lossy Compressor for HPC Data
 =====
  (C) 2016-2022 by Mathematics and Computer Science (MCS), Argonne National Laboratory.
